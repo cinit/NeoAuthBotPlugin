@@ -3,9 +3,11 @@ package cc.ioctl.neoauth3bot.chiral;
 import cc.ioctl.neoauth3bot.util.IndexFrom;
 import cc.ioctl.telebot.util.IoUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.skija.*;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -31,6 +33,9 @@ public class MoleculeRender {
         public int gridCountY = 5;
         public boolean drawGrid = true;
         public float[] labelTop;
+
+        @Nullable
+        public List<Integer> shownChiralCarbons;
 
         public float[] labelLeft;
         public float[] labelRight;
@@ -177,6 +182,8 @@ public class MoleculeRender {
 
         long beginTimestamp = System.currentTimeMillis();
 
+        List<Integer> selectedChiral = cfg.shownChiralCarbons;
+
         float dx = 0 + cfg.fontSize;
         float dy = cfg.height - cfg.fontSize;
         float mx = molecule.minX();
@@ -201,38 +208,38 @@ public class MoleculeRender {
                     (atom.showFlag & Molecule.SHOW_FLAG_EXPLICIT) == 0) {
                 cfg.labelLeft[i] = cfg.labelRight[i] = 0;
                 cfg.labelTop[i] = cfg.labelBottom[i] = 0;
-//                if (selectedChiral.contains(i + 1)) {
-//                    paint.getTextBounds("*", 0, 1, mTmpRect);
-//                    float r = mTmpRect.height() / 4f + mTmpRect.width() / 4f;
-//                    float cx, cy;
-//                    if (atom.spareSpace == Molecule.DIRECTION_BOTTOM) {
-//                        cx = dx + scaleFactor * (atom.x - mx);
-//                        cy = dy - scaleFactor * (atom.y - my) + 2 * r;
-//                    } else if (atom.spareSpace == Molecule.DIRECTION_LEFT) {
-//                        cx = dx + scaleFactor * (atom.x - mx) - 2 * r;
-//                        cy = dy - scaleFactor * (atom.y - my);
-//                    } else if (atom.spareSpace == Molecule.DIRECTION_TOP) {
-//                        cx = dx + scaleFactor * (atom.x - mx);
-//                        cy = dy - scaleFactor * (atom.y - my) - 2 * r;
-//                    } else {//DIRECTION_RIGHT
-//                        cx = dx + scaleFactor * (atom.x - mx) + 2 * r;
-//                        cy = dy - scaleFactor * (atom.y - my);
-//                    }
-//                    canvas.drawText("*", cx, cy + distance, paint);
-//                }
+                if (selectedChiral != null && selectedChiral.contains(i + 1)) {
+                    float textWidth = font.measureTextWidth("*");
+                    float r = textWidth / 4 + font.getSize() / 4;
+                    float cx, cy;
+                    if (atom.spareSpace == Molecule.DIRECTION_BOTTOM) {
+                        cx = dx + scaleFactor * (atom.x - mx);
+                        cy = dy - scaleFactor * (atom.y - my) + 2 * r;
+                    } else if (atom.spareSpace == Molecule.DIRECTION_LEFT) {
+                        cx = dx + scaleFactor * (atom.x - mx) - 2 * r;
+                        cy = dy - scaleFactor * (atom.y - my);
+                    } else if (atom.spareSpace == Molecule.DIRECTION_TOP) {
+                        cx = dx + scaleFactor * (atom.x - mx);
+                        cy = dy - scaleFactor * (atom.y - my) - 2 * r;
+                    } else {//DIRECTION_RIGHT
+                        cx = dx + scaleFactor * (atom.x - mx) + 2 * r;
+                        cy = dy - scaleFactor * (atom.y - my);
+                    }
+                    canvas.drawString("*", cx - textWidth / 2, cy + distance, font, paint);
+                }
             } else {
                 cfg.labelLeft[i] = cfg.labelRight[i] = font.measureTextWidth(atom.element) / 2;
                 cfg.labelTop[i] = (-fontMetrics.getAscent()) / 2;
                 cfg.labelBottom[i] = (fontMetrics.getDescent() / 2 - fontMetrics.getAscent()) / 2;
                 drawStringCenterHorizontal(canvas, atom.element, dx + scaleFactor * (atom.x - mx),
                         dy - scaleFactor * (atom.y - my) + distance, font, paint);
-//                if (selectedChiral.contains(i + 1)) {
-//                    float sWidth = font.measureText("*");
-//                    canvas.drawText("*",
-//                            dx + scaleFactor * (atom.x - mx) - cfg.labelLeft[i] - sWidth / 2f,
-//                            dy - scaleFactor * (atom.y - my) + distance, paint);
-//                    cfg.labelLeft[i] += sWidth;
-//                }
+                if (selectedChiral != null && selectedChiral.contains(i + 1)) {
+                    float sWidth = font.measureTextWidth("*");
+                    canvas.drawString("*",
+                            dx + scaleFactor * (atom.x - mx) - cfg.labelLeft[i] - sWidth / 2f,
+                            dy - scaleFactor * (atom.y - my) + distance, font, paint);
+                    cfg.labelLeft[i] += sWidth;
+                }
                 if (atom.charge != 0) {
                     int c = atom.charge;
                     String text;
