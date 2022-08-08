@@ -3,7 +3,6 @@ package cc.ioctl.neoauth3bot
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.Group
 import cc.ioctl.telebot.tdlib.obj.User
-import cc.ioctl.telebot.util.TokenBucket
 import com.tencent.mmkv.MMKV
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -19,7 +18,7 @@ object SessionManager {
     private val mNextAuthSeqLock = Any()
 
 
-    private val mPersists = ConcurrentHashMap<Long, MMKV>()
+    private val mPersists = ConcurrentHashMap<String, MMKV>()
     private val mGlobalConfig by lazy {
         MMKV.mmkvWithID("NeoAuth3Bot_global")
     }
@@ -32,22 +31,26 @@ object SessionManager {
         }
     }
 
-    private fun getConfigForBot(bot: Bot): MMKV {
+    private fun getConfigForBot(bot: Bot, type: String): MMKV {
         val uid = bot.userId
         if (bot.userId < 0) {
             throw IllegalArgumentException("bot.userId must be positive")
         }
-        return mPersists.computeIfAbsent(uid) { MMKV.mmkvWithID("NeoAuth3Bot_$uid") }
+        if (type.isEmpty()) {
+            throw IllegalArgumentException("type must not be empty")
+        }
+        val name = "NeoAuth3Bot_{$type}_{$uid}"
+        return mPersists.computeIfAbsent(name) { MMKV.mmkvWithID(name) }
     }
 
     fun getGroupConfig(bot: Bot, gid: Long): GroupAuthConfig? {
-        val config = getConfigForBot(bot)
+        val config = getConfigForBot(bot, "GroupConfig")
         val str = config.getString(KEY_GROUP_CONFIG_FOR_GID + gid, null) ?: return null
         return Json.decodeFromString(GroupAuthConfig.serializer(), str)
     }
 
     fun saveGroupConfig(bot: Bot, gid: Long, config: GroupAuthConfig) {
-        val configForBot = getConfigForBot(bot)
+        val configForBot = getConfigForBot(bot, "GroupConfig")
         if (config.groupId != gid) {
             throw IllegalArgumentException("config.groupId mismatch, config.groupId: ${config.groupId}, gid: $gid")
         }
@@ -58,13 +61,13 @@ object SessionManager {
     }
 
     fun getAuthSession(bot: Bot, uid: Long): UserAuthSession? {
-        val config = getConfigForBot(bot)
+        val config = getConfigForBot(bot, "UserAuthSession")
         val str = config.getString(KEY_AUTH_INFO_FOR_UID + uid, null) ?: return null
         return Json.decodeFromString(UserAuthSession.serializer(), str)
     }
 
     fun saveAuthSession(bot: Bot, uid: Long, session: UserAuthSession) {
-        val configForBot = getConfigForBot(bot)
+        val configForBot = getConfigForBot(bot, "UserAuthSession")
         if (session.userId != uid) {
             throw IllegalArgumentException("session.userId mismatch, session.userId: ${session.userId}, uid: $uid")
         }
@@ -75,7 +78,7 @@ object SessionManager {
     }
 
     fun dropAuthSession(bot: Bot, uid: Long) {
-        val configForBot = getConfigForBot(bot)
+        val configForBot = getConfigForBot(bot, "UserAuthSession")
         configForBot.removeValueForKey(KEY_AUTH_INFO_FOR_UID + uid)
     }
 
