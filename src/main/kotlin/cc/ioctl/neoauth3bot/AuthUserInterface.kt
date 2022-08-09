@@ -181,11 +181,14 @@ object AuthUserInterface {
             SessionManager.saveAuthSession(bot, user.userId, auth3Info)
             if (isInvalidateRequired) {
                 // invalidate
+                val targetGid = auth3Info.targetGroupId
+                val groupConfig = SessionManager.getGroupConfig(bot, targetGid)
+                val maxDuration = groupConfig?.authProcedureTimeoutSeconds ?: 600
                 bot.resolveMessage(chatId, auth3Info.originalMessageId, false)
                 bot.editMessageCaption(
                     chatId,
                     auth3Info.originalMessageId,
-                    LocaleHelper.createFormattedMsgText(auth3Info, user),
+                    LocaleHelper.createFormattedMsgText(auth3Info, user, maxDuration),
                     AuthUserInterface.buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
                 )
             }
@@ -229,6 +232,12 @@ object AuthUserInterface {
         val tmpMsgId = bot.sendMessageForText(chatId, LocaleHelper.getLoadingText(user), replyMsgId = requestMsgId).id
         try {
             val authId = SessionManager.nextAuthSequence()
+            val targetGid = auth3Info.targetGroupId
+            val groupConfig = if (targetGid > 0) {
+                val group = bot.resolveGroup(targetGid)
+                SessionManager.getOrCreateGroupConfig(bot, group)
+            } else null
+            Log.d(TAG, "startNewAuth: authId: $authId, user: ${user.userId}, gid: ${targetGid}")
             val t0 = System.currentTimeMillis()
             val cid = ChemDatabase.nextRandomCid()
             val molecule = MdlMolParser.parseString(
@@ -253,7 +262,12 @@ object AuthUserInterface {
                     it.sort()
                 }
             }
-            cfg.shownChiralCarbons = ArrayList(chirals)
+            if (groupConfig?.enforceMode == SessionManager.EnforceMode.WITH_HINT) {
+                cfg.shownChiralCarbons = ArrayList(chirals)
+            } else {
+                cfg.shownChiralCarbons = ArrayList()
+            }
+            val maxDuration = groupConfig?.authProcedureTimeoutSeconds ?: 600
             val t2 = System.currentTimeMillis()
             val tmpFile: File = MoleculeRender.renderMoleculeAsImage(molecule, cfg).use { img ->
                 img.encodeToData()?.use {
@@ -276,7 +290,11 @@ object AuthUserInterface {
             )
             val markup = buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
             val ret = bot.sendMessageForPhoto(
-                chatId, tmpFile, LocaleHelper.createFormattedMsgText(auth3Info, user), markup, replyMsgId = requestMsgId
+                chatId,
+                tmpFile,
+                LocaleHelper.createFormattedMsgText(auth3Info, user, maxDuration),
+                markup,
+                replyMsgId = requestMsgId
             )
             val t3 = System.currentTimeMillis()
             auth3Info.originalMessageId = ret.id
@@ -327,6 +345,7 @@ object AuthUserInterface {
                 }
             }
         }
+        Log.d(TAG, "approved user ${auth3Info.userId} into group ${targetGroupId}")
         SessionManager.dropAuthSession(bot, auth3Info.userId)
         auth3Info.originalMessageId = 0L
         if (targetGroupId != 0L) {

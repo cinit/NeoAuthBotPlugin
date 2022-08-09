@@ -266,6 +266,9 @@ class NeoAuth3Bot : PluginBase(),
                 // make TDLib know the PM chat before send msg
                 bot.resolveChat(userId)
                 bot.sendMessageForText(userId, LocaleHelper.getJoinRequestAuthRequiredText(user, group))
+                Log.d(TAG, "send user join request msg to user: $userId, group: $gid")
+            } else {
+                Log.v(TAG, "ignore user join request: $userId, group: $gid because disabled")
             }
         }
         return true

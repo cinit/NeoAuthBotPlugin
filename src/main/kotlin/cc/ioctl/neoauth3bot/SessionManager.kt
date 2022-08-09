@@ -166,17 +166,7 @@ object SessionManager {
     }
 
     fun handleUserJoinRequest(bot: Bot, user: User, group: Group): Boolean {
-        var groupConfig = getGroupConfig(bot, group.groupId)
-        if (groupConfig == null) {
-            // create default config
-            groupConfig = GroupAuthConfig(
-                group.groupId,
-                group.name,
-                true,
-                EnforceMode.WITH_HINT,
-                720
-            )
-        }
+        val groupConfig = getOrCreateGroupConfig(bot, group)
         if (!groupConfig.isEnabled) {
             return false
         }

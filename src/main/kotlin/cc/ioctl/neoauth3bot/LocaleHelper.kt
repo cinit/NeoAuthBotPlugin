@@ -20,7 +20,11 @@ object LocaleHelper {
         return "提交"
     }
 
-    fun createFormattedMsgText(info: SessionManager.UserAuthSession, user: User): FormattedText {
+    fun createFormattedMsgText(
+        info: SessionManager.UserAuthSession,
+        user: User,
+        maxDuration: Int
+    ): FormattedText {
         val selectedNames = ArrayList<String>(1)
         for (i in info.selectedRegion) {
             val x = i shr 4
@@ -32,7 +36,8 @@ object LocaleHelper {
         }
         val msg = FormattedTextBuilder().apply {
             this + "欢迎 " + user.name + " 申请加群，本群已开启验证，请在 " +
-                    Underline("720") + " 秒内选择图中所有包含手性碳的区域，并点击提交按钮。" +
+                    Underline(maxDuration.toString()) +
+                    " 秒内选择图中所有包含手性碳的区域，并点击提交按钮。" +
                     Bold("超时或验证失败将会自动拒绝申请。") + "\n" +
                     "您还可以更换 " + Underline(info.changesAllowed.toString()) + " 次题目。\n" +
                     "提示：共有 " + Underline(info.actualChiralRegion.size.toString()) + " 个区域。\n" +
