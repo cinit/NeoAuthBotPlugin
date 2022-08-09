@@ -140,7 +140,7 @@ object AdminConfigInterface {
         val group = bot.resolveGroup(adminSession.groupId)
         val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
         val msgBody: FormattedTextBuilder = FormattedTextBuilder().apply {
-            this + "配置 " + Code(group.name) + " (" + Code(groupId.toString()) + ")\n\n"
+            this + "配置 " + group.name + " (" + Code(groupId.toString()) + ")\n\n"
         }
         for (idx in configProperties.indices) {
             val prop = configProperties[idx]
