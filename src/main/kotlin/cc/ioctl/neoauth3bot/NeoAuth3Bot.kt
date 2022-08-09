@@ -22,6 +22,7 @@ class NeoAuth3Bot : PluginBase(),
 
     private lateinit var mBot: Bot
     private var mBotUid: Long = 0
+    private var mBotUsername: String? = null
     private val mPrivateMsgBpf = TokenBucket<Long>(4, 500)
     private val mCallbackQueryBpf = TokenBucket<Long>(3, 500)
     private val mAntiShockBpf = TokenBucket<Int>(2, 100)
@@ -69,6 +70,10 @@ class NeoAuth3Bot : PluginBase(),
         val bot = bots[mBotUid] ?: throw IllegalStateException("bot not found with uid $mBotUid")
         mBot = bot
         Log.i(TAG, "bot: $bot")
+        mBotUsername = bot.username
+        if (mBotUsername.isNullOrEmpty()) {
+            throw IllegalStateException("bot $bot has no username")
+        }
         bot.registerOnReceiveMessageListener(this)
         bot.registerCallbackQueryListener(this)
         bot.registerGroupMemberJoinRequestListenerV1(this)
@@ -89,20 +94,34 @@ class NeoAuth3Bot : PluginBase(),
         if (bot != mBot) {
             return false
         }
+        val msgId = message.id
+        if (message.date < SERVER_START_TIME / 1000L) {
+            Log.d(TAG, "message chatId $chatId senderId $senderId msgId $msgId is too old, ignore")
+            return true
+        }
         if (mAntiShockBpf.consume(0) < 0) {
             Log.e(TAG, "onReceiveMessage: anti-shock filter failed: chatId=$chatId, senderId=$senderId")
             return true
         }
         return runBlocking {
-            val msgId = message.id
-            if (message.date < SERVER_START_TIME / 1000L) {
-                Log.d(TAG, "message chatId $chatId senderId $senderId msgId $msgId is too old, ignore")
-                return@runBlocking true
-            }
-            if ((chatId == senderId && senderId > 0) || message.content.toString().contains("@NeoAuthBot")) {
-                Log.d(TAG, "onReceiveMessage start, chatId: $chatId, senderId: $senderId, msgId: $msgId")
+            if ((chatId == senderId && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
                 if (senderId < 0) {
                     // ignore messages from anonymous users
+                    return@runBlocking true
+                }
+                val msgText = message.content.get("text")?.asJsonObject?.get("text")?.asString
+                if (msgText == null) {
+                    val d = "onReceiveMessage start, chatId: $chatId, senderId: $senderId, msgId: $msgId, msgType: ${
+                        message.content.get("@type").asString
+                    }"
+                    Log.d(TAG, d)
+                    return@runBlocking true
+                } else {
+                    val d = "onReceiveMessage start, chatId: $chatId, senderId: $senderId, " +
+                            "msgId: $msgId, msgText: $msgText"
+                    Log.d(TAG, d)
+                }
+                if (!msgText.startsWith("/")) {
                     return@runBlocking true
                 }
                 val user = bot.resolveUser(senderId)
@@ -137,8 +156,41 @@ class NeoAuth3Bot : PluginBase(),
                     // PM
                     val isForTest = !message.content.toString().contains("\"/ccg")
                     AuthUserInterface.onStartAuthCommand(bot, chatId, user, message, isForTest)
-                } else if (message.content.toString().contains("\"/start")) {
-                    // ignore
+                } else if (msgText.startsWith("/start")) {
+                    if (msgText.length > "/start".length) {
+                        val arg = msgText.substring("/start".length).trimStart()
+                        when (arg.split("_")[0]) {
+                            "admincfg" -> {
+                                val sid = arg.split("_")[1]
+                                AdminConfigInterface.onStartConfigInterface(bot, chatId, user, message, sid)
+                                return@runBlocking true
+                            }
+                            "admincfgedit" -> {
+                                val sid = arg.split("_")[1]
+                                val idx = arg.split("_")[2].toInt()
+                                AdminConfigInterface.onStartEditValueInterface(bot, chatId, user, message, sid, idx)
+                                return@runBlocking true
+                            }
+                            else -> {
+                                bot.sendMessageForText(chatId, "Unknown command", replyMsgId = msgId)
+                                return@runBlocking true
+                            }
+                        }
+                    }
+                } else if (message.content.toString().contains("\"/config")) {
+                    if (chatId > Bot.CHAT_ID_NEGATIVE_NOTATION) {
+                        bot.sendMessageForText(
+                            chatId,
+                            LocaleHelper.getPleaseUseCmdInGroupText(user),
+                            replyMsgId = msgId
+                        )
+                        return@runBlocking true
+                    } else {
+                        val gid = Bot.chatIdToGroupId(chatId)
+                        val group = bot.resolveGroup(gid)
+                        AdminConfigInterface.onStartConfigCommand(bot, user, group, message)
+                        return@runBlocking true
+                    }
                 } else {
                     bot.sendMessageForText(chatId, "Unknown command.")
                 }

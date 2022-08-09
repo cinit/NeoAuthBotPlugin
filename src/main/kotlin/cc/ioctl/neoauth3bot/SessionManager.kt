@@ -49,7 +49,14 @@ object SessionManager {
         return Json.decodeFromString(GroupAuthConfig.serializer(), str)
     }
 
+    fun getOrCreateGroupConfig(bot: Bot, group: Group): GroupAuthConfig {
+        return getGroupConfig(bot, group.groupId) ?: GroupAuthConfig(group.groupId, group.name)
+    }
+
     fun saveGroupConfig(bot: Bot, gid: Long, config: GroupAuthConfig) {
+        if (gid <= 0) {
+            throw IllegalArgumentException("gid must be positive")
+        }
         val configForBot = getConfigForBot(bot, "GroupConfig")
         if (config.groupId != gid) {
             throw IllegalArgumentException("config.groupId mismatch, config.groupId: ${config.groupId}, gid: $gid")
@@ -148,9 +155,10 @@ object SessionManager {
     data class GroupAuthConfig(
         val groupId: Long,
         var groutName: String,
-        var isEnabled: Boolean,
-        var enforceMode: Int,
-        var defaultTimeoutSeconds: Int
+        var isEnabled: Boolean = true,
+        var enforceMode: Int = EnforceMode.WITH_HINT,
+        var startAuthTimeoutSeconds: Int = 0,
+        var authProcedureTimeoutSeconds: Int = 600,
     ) {
         init {
             assert(groupId > 0)

@@ -5,9 +5,8 @@ import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.FormattedText
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.FormattedTextBuilder
 
-
+@Suppress("unused")
 object LocaleHelper {
-
 
     fun getBtnChangeQuizText(user: User): String {
         return "换一题"
@@ -106,6 +105,9 @@ object LocaleHelper {
         }.build()
     }
 
+    fun getPleaseUseCmdInGroupText(user: User): String {
+        return "请在群组中使用本命令。"
+    }
 
     fun getBotAboutInfoFormattedText(user: User): FormattedText {
         return FormattedTextBuilder().apply {
@@ -115,9 +117,11 @@ object LocaleHelper {
                     " 框架开发, \n" +
                     "分子数据库来自 " +
                     TextUrl("PubChem", "https://pubchem.ncbi.nlm.nih.gov/") + " .\n" +
+                    "你可以在 https://github.com/cinit/NeoAuthBotPlugin 获取本机器人的源代码。\n" +
                     "如需在自己群使用，需要将群启用 成员需要批准才能加入(如为公开群，请先打开 只有群成员才能发消息)，" +
                     "或者创建一个需要批准才能加入的邀请链接，然后将机器人拉到群里设置为管理员，" +
-                    "并给机器人 can_invite_users (添加成员/生成邀请链接) 管理员权限(别的权限不需要)。提供 0% 的 SLA."
+                    "并给机器人 can_invite_users (添加成员/生成邀请链接) 管理员权限(别的权限不需要)。\n" +
+                    "目前仍在开发阶段, 十分不稳定, 提供 0% 的 SLA."
         }.build()
     }
 }
