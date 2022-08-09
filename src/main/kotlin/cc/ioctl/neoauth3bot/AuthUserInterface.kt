@@ -276,6 +276,7 @@ object AuthUserInterface {
                     f
                 } ?: throw RuntimeException("failed to encode image")
             }
+            val t3 = System.currentTimeMillis()
             // update auth info
             auth3Info.updateAuthInfo(
                 authId = authId,
@@ -296,11 +297,11 @@ object AuthUserInterface {
                 markup,
                 replyMsgId = requestMsgId
             )
-            val t3 = System.currentTimeMillis()
+            val t4 = System.currentTimeMillis()
             auth3Info.originalMessageId = ret.id
             SessionManager.saveAuthSession(bot, user.userId, auth3Info)
             println("msg id = " + ret.id + ", serverMsgId = " + ret.serverMsgId)
-            Log.d(TAG, "load cost: ${t1 - t0}, render cost: ${t2 - t1}, send cost: ${t3 - t2}")
+            Log.d(TAG, "load cost: ${t1 - t0}, chiral cost: ${t2 - t1}, render cost: ${t3 - t2}, send cost: ${t4 - t3}")
         } catch (e: Exception) {
             val msg = "create auth3 error: " + (e.message ?: e.toString())
             Log.e(TAG, msg, e)
