@@ -1,5 +1,6 @@
 package cc.ioctl.neoauth3bot
 
+import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.Group
 import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.FormattedText
@@ -98,15 +99,17 @@ object LocaleHelper {
         return "暂不开放(请手动发送 /ccg 命令)"
     }
 
-    fun getBotHelpInfoFormattedText(user: User): FormattedText {
+    fun getBotHelpInfoFormattedText(bot: Bot, user: User): FormattedText {
         return FormattedTextBuilder().apply {
             this + Bold("验证相关") + "\n" +
-                    "/ccg 开始入群验证以及更换题目\n\n" +
+                    "/ccg 开始入群验证以及更换题目\n" +
+                    "/config 配置入群验证\n\n" +
                     Bold("测试相关") + "\n" +
                     "/cc1 仅用于测试\n\n" +
                     Bold("其他") + "\n" +
                     "/help 显示本信息\n" +
-                    "/about 关于本机器人"
+                    "/about 关于本机器人\n\n" +
+                    "在群里使用命令时请在命令后加上 @机器人用户名, 如 /config@${bot.username}"
         }.build()
     }
 

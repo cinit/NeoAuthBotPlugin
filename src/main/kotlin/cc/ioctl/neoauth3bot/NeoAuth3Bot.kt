@@ -134,7 +134,11 @@ class NeoAuth3Bot : PluginBase(),
                     }
                 }
                 if (message.content.toString().contains("\"/help")) {
-                    bot.sendMessageForText(chatId, LocaleHelper.getBotHelpInfoFormattedText(user), replyMsgId = msgId)
+                    bot.sendMessageForText(
+                        chatId,
+                        LocaleHelper.getBotHelpInfoFormattedText(bot, user),
+                        replyMsgId = msgId
+                    )
                 } else if (message.content.toString().contains("\"/about")) {
                     bot.sendMessageForText(chatId, LocaleHelper.getBotAboutInfoFormattedText(user), replyMsgId = msgId)
                 } else if (message.content.toString().contains("\"/group_id")) {
