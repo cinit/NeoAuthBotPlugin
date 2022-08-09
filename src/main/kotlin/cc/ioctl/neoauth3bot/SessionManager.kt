@@ -39,7 +39,7 @@ object SessionManager {
         if (type.isEmpty()) {
             throw IllegalArgumentException("type must not be empty")
         }
-        val name = "NeoAuth3Bot_{$type}_{$uid}"
+        val name = "NeoAuth3Bot_${type}_${uid}"
         return mPersists.computeIfAbsent(name) { MMKV.mmkvWithID(name) }
     }
 
