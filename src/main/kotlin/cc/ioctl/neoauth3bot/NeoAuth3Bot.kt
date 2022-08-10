@@ -117,8 +117,12 @@ class NeoAuth3Bot : PluginBase(),
                     Log.d(TAG, d)
                     return@runBlocking true
                 } else {
+                    // truncate message text to avoid flooding logs
+                    val dumpShowMsg = msgText.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t").let {
+                        it.substring(0, it.length.coerceAtMost(150))
+                    }
                     val d = "onReceiveMessage start, chatId: $chatId, senderId: $senderId, " +
-                            "msgId: $msgId, msgText: $msgText"
+                            "msgId: $msgId, msgText: $dumpShowMsg"
                     Log.d(TAG, d)
                 }
                 if (!msgText.startsWith("/")) {
