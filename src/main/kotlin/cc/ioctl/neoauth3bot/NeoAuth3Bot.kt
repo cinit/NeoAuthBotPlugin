@@ -157,9 +157,18 @@ class NeoAuth3Bot : PluginBase(),
                     message.content.toString().contains("\"/cc1") ||
                     (chatId == senderId && message.content.toString().contains("\"/ccg"))
                 ) {
-                    // PM
-                    val isForTest = !message.content.toString().contains("\"/ccg")
-                    AuthUserInterface.onStartAuthCommand(bot, chatId, user, message, isForTest)
+                    if (!Bot.isTrivialPrivateChat(chatId)) {
+                        // in group chat
+                        bot.sendMessageForText(
+                            chatId,
+                            LocaleHelper.getCommandOnlyAvailableInPrivateChatText(user),
+                            replyMsgId = msgId
+                        )
+                        return@runBlocking true
+                    } else {
+                        val isForTest = !message.content.toString().contains("\"/ccg")
+                        AuthUserInterface.onStartAuthCommand(bot, chatId, user, message, isForTest)
+                    }
                 } else if (msgText.startsWith("/start")) {
                     if (msgText.length > "/start".length) {
                         val arg = msgText.substring("/start".length).trimStart()

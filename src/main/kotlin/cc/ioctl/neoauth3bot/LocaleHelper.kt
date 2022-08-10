@@ -132,4 +132,8 @@ object LocaleHelper {
                     "目前仍在开发阶段, 十分不稳定, 提供 0% 的 SLA."
         }.build()
     }
+
+    fun getCommandOnlyAvailableInPrivateChatText(user: User): String {
+        return "该命令只能在私聊中使用。";
+    }
 }
