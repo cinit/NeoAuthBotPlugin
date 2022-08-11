@@ -1,6 +1,7 @@
 package cc.ioctl.neoauth3bot
 
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
+import cc.ioctl.neoauth3bot.svc.FilterService
 import cc.ioctl.neoauth3bot.util.BinaryUtils
 import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
@@ -25,7 +26,8 @@ class NeoAuth3Bot : PluginBase(),
     private var mBotUsername: String? = null
     private val mPrivateMsgBpf = TokenBucket<Long>(4, 500)
     private val mCallbackQueryBpf = TokenBucket<Long>(3, 500)
-    private val mAntiShockBpf = TokenBucket<Int>(2, 100)
+    private val mAntiShockBpf = TokenBucket<Int>(3, 100)
+    private val mHypervisorIds = ArrayList<Long>()
 
     companion object {
         private val SERVER_START_TIME = System.currentTimeMillis()
@@ -57,6 +59,17 @@ class NeoAuth3Bot : PluginBase(),
         val indexPath: String? = cfg.getString("index_path")
         val candidatePath: String? = cfg.getString("candidate_path")
         val botUid = cfg.getLong("bot_uid", 0)
+        mHypervisorIds.clear()
+        cfg.getList<Long>("hypervisor_ids").forEach { id ->
+            if (!Bot.isTrivialUserSender(id) && !Bot.isAnonymousSender(id)) {
+                Log.e(TAG, "Invalid hypervisor user id: $id")
+            } else {
+                if (Bot.isAnonymousSender(id)) {
+                    Log.w(TAG, "Using anonymous hypervisor id($id) is discouraged")
+                }
+                mHypervisorIds.add(id)
+            }
+        }
         if (sdfPath == null || indexPath == null || candidatePath == null || botUid == 0L) {
             askUserToUpdateConfigFile()
             return
@@ -86,6 +99,7 @@ class NeoAuth3Bot : PluginBase(),
         Log.e(TAG, "sdf_path = \"/path/to/sdf\"")
         Log.e(TAG, "index_path = \"/path/to/index\"")
         Log.e(TAG, "candidate_path = \"/path/to/candidate\"")
+        Log.e(TAG, "hypervisor_ids = [ids of hypervisors]")
         Log.e(TAG, "NeoAuth3Bot not loaded correctly.")
         Log.e(TAG, "Aborting...")
     }
@@ -99,14 +113,14 @@ class NeoAuth3Bot : PluginBase(),
             Log.d(TAG, "message chatId $chatId senderId $senderId msgId $msgId is too old, ignore")
             return true
         }
-        if (mAntiShockBpf.consume(0) < 0) {
-            Log.e(TAG, "onReceiveMessage: anti-shock filter failed: chatId=$chatId, senderId=$senderId")
-            return true
-        }
-        return runBlocking {
-            if ((chatId == senderId && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
-                if (senderId < 0) {
-                    // ignore messages from anonymous users
+        if ((chatId == senderId && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
+            if (mAntiShockBpf.consume(0) < 0) {
+                Log.w(TAG, "onReceiveMessage: anti-shock filter failed: chatId=$chatId, senderId=$senderId")
+                return true
+            }
+            return runBlocking {
+                if (senderId == chatId && FilterService.isBlocked(senderId)) {
+                    // ignore messages from blocked users
                     return@runBlocking true
                 }
                 val msgText = message.content.get("text")?.asJsonObject?.get("text")?.asString
@@ -124,6 +138,43 @@ class NeoAuth3Bot : PluginBase(),
                     val d = "onReceiveMessage start, chatId: $chatId, senderId: $senderId, " +
                             "msgId: $msgId, msgText: $dumpShowMsg"
                     Log.d(TAG, d)
+                }
+                if (mHypervisorIds.contains(senderId)) {
+                    if (msgText.startsWith("/") || msgText.startsWith("!")) {
+                        val body = msgText.substring(1)
+                        if (body.startsWith("hvcmd")) {
+                            val parts = body.split(" ")
+                            if (parts.size < 3) {
+                                bot.sendMessageForText(
+                                    chatId,
+                                    "Invalid argument. Usage: /hvcmd SERVICE CMD [ARGS...]",
+                                    replyMsgId = msgId
+                                )
+                            } else {
+                                val svc = parts[1]
+                                val cmd = parts[2]
+                                val args = parts.drop(3)
+                                try {
+                                    Log.d(TAG, "hvcmd $senderId: $svc $cmd $args")
+                                    HypervisorCommandHandler.onSupervisorCommand(
+                                        bot, chatId, senderId, svc, cmd, args.toTypedArray()
+                                    )
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "exec hv cmd '$msgText': $e", e)
+                                    bot.sendMessageForText(
+                                        chatId,
+                                        e.message ?: e.toString(),
+                                        replyMsgId = msgId
+                                    )
+                                }
+                            }
+                            return@runBlocking true
+                        }
+                    }
+                }
+                if (senderId < 0) {
+                    // ignore messages from anonymous users
+                    return@runBlocking true
                 }
                 if (!msgText.startsWith("/")) {
                     return@runBlocking true
@@ -213,8 +264,8 @@ class NeoAuth3Bot : PluginBase(),
                 }
                 return@runBlocking true
             }
-            return@runBlocking false
         }
+        return false
     }
 
     private suspend fun errorAlert(bot: Bot, queryId: String, msg: String) {
