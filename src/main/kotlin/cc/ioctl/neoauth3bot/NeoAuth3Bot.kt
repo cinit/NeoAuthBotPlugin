@@ -30,7 +30,8 @@ class NeoAuth3Bot : PluginBase(),
     private val mHypervisorIds = ArrayList<Long>()
 
     companion object {
-        private val SERVER_START_TIME = System.currentTimeMillis()
+        // allow up to 5min
+        private val SYNC_START_TIME = System.currentTimeMillis() - 5 * 60 * 1000
         private const val TAG = "NeoAuth3Bot"
 
         @JvmStatic
@@ -109,7 +110,7 @@ class NeoAuth3Bot : PluginBase(),
             return false
         }
         val msgId = message.id
-        if (message.date < SERVER_START_TIME / 1000L) {
+        if (message.date < SYNC_START_TIME / 1000L) {
             Log.d(TAG, "message chatId $chatId senderId $senderId msgId $msgId is too old, ignore")
             return true
         }
