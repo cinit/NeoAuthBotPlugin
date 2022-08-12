@@ -63,7 +63,7 @@ object AdminConfigInterface {
             "等待开始验证时间",
             PropertyType.INT32,
             "单位: 秒; 如果用户在发送加群审核后指定的时间内未发送 /ccg 开始验证, 则自动拒绝; " +
-                    "设置为 0 则不会自动拒绝; 取值范围 {0}U[60, 86400] (目前还没有实现)",
+                    "设置为 0 则不会自动拒绝; 取值范围 {0}U[60, 86400]",
             SessionManager.GroupAuthConfig::startAuthTimeoutSeconds
         ) { it == 0 || it in 60..86400 },
         ConfigPropertyMetadata(

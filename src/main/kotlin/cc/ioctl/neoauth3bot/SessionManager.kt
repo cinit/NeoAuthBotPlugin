@@ -157,7 +157,7 @@ object SessionManager {
         var groutName: String,
         var isEnabled: Boolean = true,
         var enforceMode: Int = EnforceMode.WITH_HINT,
-        var startAuthTimeoutSeconds: Int = 0,
+        var startAuthTimeoutSeconds: Int = 600,
         var authProcedureTimeoutSeconds: Int = 600,
     ) {
         init {

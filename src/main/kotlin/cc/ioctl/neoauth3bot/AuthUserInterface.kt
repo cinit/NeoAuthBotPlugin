@@ -233,6 +233,7 @@ object AuthUserInterface {
         try {
             val authId = SessionManager.nextAuthSequence()
             val targetGid = auth3Info.targetGroupId
+            auth3Info.authStatus = SessionManager.AuthStatus.AUTHENTICATING
             val groupConfig = if (targetGid > 0) {
                 val group = bot.resolveGroup(targetGid)
                 SessionManager.getOrCreateGroupConfig(bot, group)

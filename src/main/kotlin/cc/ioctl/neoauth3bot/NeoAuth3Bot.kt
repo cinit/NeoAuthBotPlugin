@@ -7,12 +7,15 @@ import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
 import cc.ioctl.telebot.startup.BotStartupMain
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.tlrpc.RemoteApiException
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.Message
 import cc.ioctl.telebot.util.Base64
 import cc.ioctl.telebot.util.Log
 import cc.ioctl.telebot.util.TokenBucket
+import cc.ioctl.telebot.util.postDelayed
 import com.google.gson.JsonObject
 import com.moandjiezana.toml.Toml
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
@@ -326,7 +329,7 @@ class NeoAuth3Bot : PluginBase(),
     }
 
     override fun onMemberJoinRequest(bot: Bot, chatId: Long, userId: Long, event: JsonObject): Boolean {
-        Log.d(TAG, "onMemberJoinRequest: chatId: $chatId, userId: $userId, event: $event")
+        Log.d(TAG, "onMemberJoinRequest: chatId: $chatId, userId: $userId")
         runBlocking {
             val gid = Bot.chatIdToGroupId(chatId)
             val group = bot.resolveGroup(gid)
@@ -334,10 +337,40 @@ class NeoAuth3Bot : PluginBase(),
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
                 // make TDLib know the PM chat before send msg
                 bot.resolveChat(userId)
-                bot.sendMessageForText(userId, LocaleHelper.getJoinRequestAuthRequiredText(user, group))
-                Log.d(TAG, "send user join request msg to user: $userId, group: $gid")
+                val originHintMsgId = bot.sendMessageForText(
+                    userId,
+                    LocaleHelper.getJoinRequestAuthRequiredText(user, group)
+                )
+                Log.i(TAG, "send user join request msg to user: $userId, group: $gid")
+                val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
+                val maxWaitTimeSeconds = groupConfig.startAuthTimeoutSeconds
+                if (maxWaitTimeSeconds > 0) {
+                    // schedule a job to dismiss the request after timeout
+                    postDelayed(maxWaitTimeSeconds * 1000L) {
+                        // check whether the auth session is still valid
+                        val authSession = SessionManager.getAuthSession(bot, userId)
+                        if (authSession != null) {
+                            if (authSession.currentAuthId == 0 && authSession.authStatus == SessionManager.AuthStatus.REQUESTED) {
+                                Log.i(TAG, "dismiss timeout join request: $userId, group: $gid")
+                                // drop the auth session if the user didn't start auth in time
+                                SessionManager.dropAuthSession(bot, userId)
+                                // delete the msg and dismiss the request
+                                try {
+                                    bot.deleteMessage(chatId, originHintMsgId.id)
+                                } catch (e: RemoteApiException) {
+                                    Log.w(TAG, "delete request msg: $e")
+                                }
+                                bot.processChatJoinRequest(chatId, userId, false)
+                            }
+                        }
+                    }.invokeOnCompletion {
+                        if (it != null && it !is CancellationException) {
+                            Log.e(TAG, "onMemberJoinRequest postDelayed, error: ${it.message}", it)
+                        }
+                    }
+                }
             } else {
-                Log.v(TAG, "ignore user join request: $userId, group: $gid because disabled")
+                Log.i(TAG, "ignore user join request: $userId, group: $gid because disabled")
             }
         }
         return true
