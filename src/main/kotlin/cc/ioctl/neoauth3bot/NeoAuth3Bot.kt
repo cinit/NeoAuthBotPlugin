@@ -34,7 +34,8 @@ class NeoAuth3Bot : PluginBase(),
 
     companion object {
         // allow up to 5min
-        private val SYNC_START_TIME = System.currentTimeMillis() - 5 * 60 * 1000
+        internal val BOT_START_TIME = System.currentTimeMillis()
+        private val SYNC_START_TIME = BOT_START_TIME - 5 * 60 * 1000
         private const val TAG = "NeoAuth3Bot"
 
         @JvmStatic
@@ -161,7 +162,7 @@ class NeoAuth3Bot : PluginBase(),
                                 try {
                                     Log.d(TAG, "hvcmd $senderId: $svc $cmd $args")
                                     HypervisorCommandHandler.onSupervisorCommand(
-                                        bot, chatId, senderId, svc, cmd, args.toTypedArray()
+                                        bot, chatId, senderId, svc, cmd, args.toTypedArray(), msgId
                                     )
                                 } catch (e: Exception) {
                                     Log.e(TAG, "exec hv cmd '$msgText': $e", e)
