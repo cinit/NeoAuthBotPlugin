@@ -108,6 +108,7 @@ object LocaleHelper {
                     "/cc1 仅用于测试\n\n" +
                     Bold("其他") + "\n" +
                     "/help 显示本信息\n" +
+                    "/uptime 测试机器人存活\n" +
                     "/about 关于本机器人\n\n" +
                     "在群里使用命令时请在命令后加上 @机器人用户名, 如 /config@${bot.username}"
         }.build()

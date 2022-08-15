@@ -18,31 +18,32 @@ object SysVmService : HypervisorCommandHandler.HvCmdCallback {
                 System.exit(0)
                 throw IllegalStateException()
             }
-            "u", "uptime" -> {
-                val start = NeoAuth3Bot.BOT_START_TIME
-                val now = System.currentTimeMillis()
-                val uptime = (now - start) / 1000
-                val d = uptime / (60 * 60 * 24)
-                val h = (uptime / (60 * 60)) % 24
-                val m = (uptime / 60) % 60
-                val s = uptime % 60
-                val sb = StringBuilder("Uptime: ")
-                if (d > 0) {
-                    sb.append(d).append("d ")
-                }
-                if (h > 0) {
-                    sb.append(h).append("h ")
-                }
-                if (m > 0) {
-                    sb.append(m).append("m ")
-                }
-                sb.append(s).append("s")
-                return sb.toString()
-            }
             else -> {
                 return "ENOSYS"
             }
         }
+    }
+
+    fun getUptimeString(): String {
+        val start = NeoAuth3Bot.BOT_START_TIME
+        val now = System.currentTimeMillis()
+        val uptime = (now - start) / 1000
+        val d = uptime / (60 * 60 * 24)
+        val h = (uptime / (60 * 60)) % 24
+        val m = (uptime / 60) % 60
+        val s = uptime % 60
+        val sb = StringBuilder("Uptime: ")
+        if (d > 0) {
+            sb.append(d).append("d ")
+        }
+        if (h > 0) {
+            sb.append(h).append("h ")
+        }
+        if (m > 0) {
+            sb.append(m).append("m ")
+        }
+        sb.append(s).append("s")
+        return sb.toString()
     }
 
 }

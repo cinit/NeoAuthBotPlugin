@@ -2,6 +2,7 @@ package cc.ioctl.neoauth3bot
 
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
 import cc.ioctl.neoauth3bot.svc.FilterService
+import cc.ioctl.neoauth3bot.svc.SysVmService
 import cc.ioctl.neoauth3bot.util.BinaryUtils
 import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
@@ -199,6 +200,8 @@ class NeoAuth3Bot : PluginBase(),
                         LocaleHelper.getBotHelpInfoFormattedText(bot, user),
                         replyMsgId = msgId
                     )
+                } else if (msgText.startsWith("/uptime")) {
+                    bot.sendMessageForText(chatId, SysVmService.getUptimeString(), replyMsgId = msgId)
                 } else if (message.content.toString().contains("\"/about")) {
                     bot.sendMessageForText(chatId, LocaleHelper.getBotAboutInfoFormattedText(user), replyMsgId = msgId)
                 } else if (message.content.toString().contains("\"/group_id")) {
