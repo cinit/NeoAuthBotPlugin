@@ -32,6 +32,13 @@ class NeoAuth3Bot : PluginBase(),
     private val mCallbackQueryBpf = TokenBucket<Long>(3, 500)
     private val mAntiShockBpf = TokenBucket<Int>(3, 100)
     private val mHypervisorIds = ArrayList<Long>()
+    private val mCascadeDeleteMsgLock = Any()
+    private val mCascadeDeleteMsg = object : LinkedHashMap<String, Long>() {
+        // 1000 elements max
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>): Boolean {
+            return size > 1000
+        }
+    }
 
     companion object {
         // allow up to 5min
@@ -155,7 +162,7 @@ class NeoAuth3Bot : PluginBase(),
                                     chatId,
                                     "Invalid argument. Usage: /hvcmd SERVICE CMD [ARGS...]",
                                     replyMsgId = msgId
-                                )
+                                ).scheduledCascadeDelete(msgId)
                             } else {
                                 val svc = parts[1]
                                 val cmd = parts[2]
@@ -171,7 +178,7 @@ class NeoAuth3Bot : PluginBase(),
                                         chatId,
                                         e.message ?: e.toString(),
                                         replyMsgId = msgId
-                                    )
+                                    ).scheduledCascadeDelete(msgId)
                                 }
                             }
                             return@runBlocking true
@@ -191,6 +198,7 @@ class NeoAuth3Bot : PluginBase(),
                         return@runBlocking true
                     } else if (it == 0) {
                         bot.sendMessageForText(chatId, LocaleHelper.getTooManyRequestsText(user))
+                            .scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     }
                 }
@@ -199,11 +207,13 @@ class NeoAuth3Bot : PluginBase(),
                         chatId,
                         LocaleHelper.getBotHelpInfoFormattedText(bot, user),
                         replyMsgId = msgId
-                    )
+                    ).scheduledCascadeDelete(msgId)
                 } else if (msgText.startsWith("/uptime")) {
                     bot.sendMessageForText(chatId, SysVmService.getUptimeString(), replyMsgId = msgId)
+                        .scheduledCascadeDelete(msgId)
                 } else if (message.content.toString().contains("\"/about")) {
                     bot.sendMessageForText(chatId, LocaleHelper.getBotAboutInfoFormattedText(user), replyMsgId = msgId)
+                        .scheduledCascadeDelete(msgId)
                 } else if (message.content.toString().contains("\"/group_id")) {
                     try {
                         val gid = Bot.chatIdToGroupId(chatId)
@@ -212,9 +222,10 @@ class NeoAuth3Bot : PluginBase(),
                             chatId,
                             "Group ID: ${group.groupId}\nGroup Name: ${group.name}",
                             replyMsgId = msgId
-                        )
+                        ).scheduledCascadeDelete(msgId)
                     } catch (e: Exception) {
                         bot.sendMessageForText(chatId, e.message ?: e.toString(), replyMsgId = msgId)
+                            .scheduledCascadeDelete(msgId)
                     }
                 } else if (
                     message.content.toString().contains("\"/cc1") ||
@@ -226,7 +237,7 @@ class NeoAuth3Bot : PluginBase(),
                             chatId,
                             LocaleHelper.getCommandOnlyAvailableInPrivateChatText(user),
                             replyMsgId = msgId
-                        )
+                        ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     } else {
                         val isForTest = !message.content.toString().contains("\"/ccg")
@@ -249,6 +260,7 @@ class NeoAuth3Bot : PluginBase(),
                             }
                             else -> {
                                 bot.sendMessageForText(chatId, "Unknown command", replyMsgId = msgId)
+                                    .scheduledCascadeDelete(msgId)
                                 return@runBlocking true
                             }
                         }
@@ -259,7 +271,7 @@ class NeoAuth3Bot : PluginBase(),
                             chatId,
                             LocaleHelper.getPleaseUseCmdInGroupText(user),
                             replyMsgId = msgId
-                        )
+                        ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     } else {
                         val gid = Bot.chatIdToGroupId(chatId)
@@ -268,7 +280,8 @@ class NeoAuth3Bot : PluginBase(),
                         return@runBlocking true
                     }
                 } else {
-                    bot.sendMessageForText(chatId, "Unknown command.")
+                    bot.sendMessageForText(chatId, "Unknown command.", replyMsgId = msgId)
+                        .scheduledCascadeDelete(msgId)
                 }
                 return@runBlocking true
             }
@@ -391,7 +404,45 @@ class NeoAuth3Bot : PluginBase(),
     }
 
     override fun onDeleteMessages(bot: Bot, chatId: Long, msgIds: List<Long>): Boolean {
-        return false
+        val msgToDelete = HashSet<Long>(4)
+        val keys = msgIds.map { chatId.toString() + "_" + it.toString() }
+        synchronized(mCascadeDeleteMsgLock) {
+            keys.forEach { k ->
+                mCascadeDeleteMsg.remove(k)?.let { id ->
+                    msgToDelete.add(id)
+                }
+            }
+        }
+        if (msgToDelete.isNotEmpty()) {
+            runBlocking {
+                try {
+                    bot.deleteMessages(chatId, msgToDelete.toList())
+                } catch (e: RemoteApiException) {
+                    // we don't really care about the error
+                    Log.w(TAG, "cascade delete msg, error: ${e.message}")
+                }
+            }
+        }
+        return true
+    }
+
+    fun scheduleCascadeDeleteMessage(chatId: Long, origMsgId: Long, targetMsgId: Long) {
+        assert(origMsgId != targetMsgId)
+        assert(chatId != 0L)
+        assert(origMsgId > 0L)
+        assert(targetMsgId > 0L)
+        val key = chatId.toString() + "_" + origMsgId
+        synchronized(mCascadeDeleteMsgLock) {
+            mCascadeDeleteMsg[key] = targetMsgId
+        }
+    }
+
+    internal fun Message.scheduledCascadeDelete(origMsgId: Long) {
+        if (this.serverMsgId == 0L) {
+            // we don't need to delete the msg if it's not sent to server yet
+            return
+        }
+        scheduleCascadeDeleteMessage(chatId, origMsgId, this.id)
     }
 
 }
