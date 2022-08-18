@@ -303,6 +303,8 @@ object AuthUserInterface {
             SessionManager.saveAuthSession(bot, user.userId, auth3Info)
             println("msg id = " + ret.id + ", serverMsgId = " + ret.serverMsgId)
             Log.d(TAG, "load cost: ${t1 - t0}, chiral cost: ${t2 - t1}, render cost: ${t3 - t2}, send cost: ${t4 - t3}")
+            // delete temporary file
+            tmpFile.delete()
         } catch (e: Exception) {
             val msg = "create auth3 error: " + (e.message ?: e.toString())
             Log.e(TAG, msg, e)
