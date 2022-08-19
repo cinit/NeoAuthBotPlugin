@@ -7,6 +7,7 @@ interface Resources {
     val btn_text_change_quiz: String
     val btn_text_reset: String
     val btn_text_submit: String
+    val btn_text_cancel: String
 
     val auth_instruction_part1: String
     val auth_instruction_part2: String
@@ -50,6 +51,11 @@ interface Resources {
     val help_about_desc2_part1: String
     val help_about_desc2_part2: String
     val help_about_desc3: String
+
+    val btn_text_verify_anony_identity: String
+    val msg_text_anonymous_admin_identity_verification_required: String
+    val cb_query_admin_permission_required: String
+    val cb_query_nothing_to_do_with_you: String
 
     fun format(fm: String, vararg args: Any): String {
         return String.format(Locale.ROOT, fm, *args)

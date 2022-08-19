@@ -9,6 +9,7 @@ object ResImpl {
         override val btn_text_change_quiz = "换一题"
         override val btn_text_reset = "重置"
         override val btn_text_submit = "提交"
+        override val btn_text_cancel = "取消"
 
         override val auth_instruction_part1 = "欢迎 "
         override val auth_instruction_part2 = " 申请加群，本群已开启验证，请在 "
@@ -62,6 +63,11 @@ object ResImpl {
                     "和 can_delete_messages (删除消息, 推荐, 但不是必须) 管理员权限(其他权限不需要)。\n" +
                     "目前仍在开发阶段, 十分不稳定, 提供 0% 的 SLA."
 
+        override val btn_text_verify_anony_identity = "点此验证"
+        override val msg_text_anonymous_admin_identity_verification_required =
+            "您现在是以匿名管理员，请点击下方按钮验证身份。"
+        override val cb_query_admin_permission_required = "需要管理员权限"
+        override val cb_query_nothing_to_do_with_you = "与汝无瓜"
     }
 
     val eng = object : Resources {
@@ -69,6 +75,7 @@ object ResImpl {
         override val btn_text_change_quiz = "Change Quiz"
         override val btn_text_reset = "Reset"
         override val btn_text_submit = "Submit"
+        override val btn_text_cancel = "Cancel"
 
         override val auth_instruction_part1 = "Welcome "
         override val auth_instruction_part2 = ". This group has anti-spam CAPTCHA enabled.\n" +
@@ -125,6 +132,12 @@ object ResImpl {
                 "with can_invite_users (required) and can_delete_messages (recommended, but not necessary) " +
                 "permissions (other permissions are not required).\n" +
                 "Currently, the bot is still under development, providing 0% SLA."
+
+        override val btn_text_verify_anony_identity = "Click To Verify"
+        override val msg_text_anonymous_admin_identity_verification_required = "You are now as an anonymous admin.\n" +
+                "Please click the button below to verify your identity."
+        override val cb_query_admin_permission_required = "Admin permission required."
+        override val cb_query_nothing_to_do_with_you = "It's not related to you."
     }
 
     fun getResourceForLanguage(lang: String): Resources {

@@ -9,8 +9,11 @@ import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
 import cc.ioctl.telebot.startup.BotStartupMain
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.RemoteApiException
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.Message
+import cc.ioctl.telebot.tdlib.tlrpc.api.msg.ReplyMarkup
+import cc.ioctl.telebot.tdlib.tlrpc.api.msg.inlineKeyboardCallbackButton
 import cc.ioctl.telebot.util.Base64
 import cc.ioctl.telebot.util.Log
 import cc.ioctl.telebot.util.TokenBucket
@@ -18,8 +21,10 @@ import cc.ioctl.telebot.util.postDelayed
 import com.google.gson.JsonObject
 import com.moandjiezana.toml.Toml
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class NeoAuth3Bot : PluginBase(),
     EventHandler.MessageListenerV1,
@@ -33,11 +38,69 @@ class NeoAuth3Bot : PluginBase(),
     private val mCallbackQueryBpf = TokenBucket<Long>(3, 500)
     private val mAntiShockBpf = TokenBucket<Int>(3, 100)
     private val mHypervisorIds = ArrayList<Long>()
+    private val mNextAnonymousAdminVerificationId = AtomicInteger(1)
+    private val mAnonymousAdminVerifications = HashMap<Int, AnonymousAdminVerification>(1)
     private val mCascadeDeleteMsgLock = Any()
     private val mCascadeDeleteMsg = object : LinkedHashMap<String, Long>() {
         // 1000 elements max
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>): Boolean {
             return size > 1000
+        }
+    }
+
+    data class AnonymousAdminVerification(
+        val id: Int,
+        val chatId: Long,
+        val origMsgId: Long,
+        var tmpMsgId: Long = 0
+    ) {
+        fun getMagicBytes(cmd: Int): ByteArray {
+            val type = 3
+            val subType = 0
+            val len = 4
+            val ret = ByteArray(8)
+            ret[0] = type.toByte()
+            ret[1] = subType.toByte()
+            ret[2] = len.toByte()
+            ret[3] = cmd.toByte()
+            BinaryUtils.writeLe32(ret, 4, id)
+            return ret
+        }
+
+        companion object {
+            @JvmStatic
+            fun getIdFromMagicBytes(bytes: ByteArray): Int {
+                if (bytes.size != 8) {
+                    return 0
+                }
+                if (bytes[0] != 3.toByte()) {
+                    return 0
+                }
+                if (bytes[1] != 0.toByte()) {
+                    return 0
+                }
+                if (bytes[2] != 4.toByte()) {
+                    return 0
+                }
+                return BinaryUtils.readLe32(bytes, 4)
+            }
+
+            @JvmStatic
+            fun getCmdFromMagicBytes(bytes: ByteArray): Int {
+                if (bytes.size != 8) {
+                    return 0
+                }
+                if (bytes[0] != 3.toByte()) {
+                    return 0
+                }
+                if (bytes[1] != 0.toByte()) {
+                    return 0
+                }
+                if (bytes[2] != 4.toByte()) {
+                    return 0
+                }
+                return bytes[3].toInt()
+            }
         }
     }
 
@@ -187,7 +250,43 @@ class NeoAuth3Bot : PluginBase(),
                     }
                 }
                 if (senderId < 0) {
-                    // ignore messages from anonymous users
+                    if (senderId == chatId) {
+                        if (msgText.startsWith("/config")) {
+                            val aaaId = mNextAnonymousAdminVerificationId.getAndIncrement()
+                            val session = AnonymousAdminVerification(aaaId, chatId, msgId)
+                            val r = ResImpl.eng
+                            val tmpMsgId = bot.sendMessageForText(
+                                chatId,
+                                r.msg_text_anonymous_admin_identity_verification_required,
+                                replyMsgId = msgId,
+                                replyMarkup = ReplyMarkup.InlineKeyboard(
+                                    arrayOf(
+                                        arrayOf(
+                                            inlineKeyboardCallbackButton(
+                                                r.btn_text_verify_anony_identity,
+                                                session.getMagicBytes(1)
+                                            ),
+                                            inlineKeyboardCallbackButton(
+                                                r.btn_text_cancel,
+                                                session.getMagicBytes(2)
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                            session.tmpMsgId = tmpMsgId.id
+                            mAnonymousAdminVerifications[aaaId] = session
+                            // schedule deletion of the message after 30 seconds
+                            postDelayed(30_000) {
+                                mAnonymousAdminVerifications.remove(aaaId)
+                                try {
+                                    bot.deleteMessage(chatId, tmpMsgId.id)
+                                } catch (e: RemoteApiException) {
+                                    Log.i(TAG, "deleteMessage failed: $e")
+                                }
+                            }.logErrorIfFail()
+                        }
+                    }
                     return@runBlocking true
                 }
                 if (!msgText.startsWith("/")) {
@@ -278,7 +377,7 @@ class NeoAuth3Bot : PluginBase(),
                     } else {
                         val gid = Bot.chatIdToGroupId(chatId)
                         val group = bot.resolveGroup(gid)
-                        AdminConfigInterface.onStartConfigCommand(bot, user, group, message)
+                        AdminConfigInterface.onStartConfigCommand(bot, user, group, message.id)
                         return@runBlocking true
                     }
                 } else {
@@ -323,18 +422,34 @@ class NeoAuth3Bot : PluginBase(),
                     }
                     try {
                         val payloadData = query["payload"].asJsonObject["data"].asString
-                        val bytes8 = Base64.decode(payloadData, Base64.NO_WRAP)
-                        if (bytes8.size != 8) {
-                            errorAlert(bot, queryId, "unexpected payload data, expected 8 bytes")
-                            return@runBlocking
+                        val bytes = Base64.decode(payloadData, Base64.NO_WRAP)
+                        if (chatId > 0) {
+                            // PM
+                            if (bytes.size != 8) {
+                                errorAlert(bot, queryId, "unexpected payload data, expected 8 bytes")
+                                return@runBlocking
+                            }
+                            val authId = BinaryUtils.readLe32(bytes, 0)
+                            val authInfo = SessionManager.getAuthSession(bot, user.userId)
+                            if (authInfo == null) {
+                                errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
+                                return@runBlocking
+                            }
+                            AuthUserInterface.onBtnClick(bot, user, chatId, authInfo, bytes, queryId)
+                        } else {
+                            // group
+                            val type = bytes[0].toInt()
+                            when (type) {
+                                3 -> {
+                                    onAnonymousAdminCallback(bot, user, chatId, bytes, queryId)
+                                    return@runBlocking
+                                }
+                                else -> {
+                                    errorAlert(bot, queryId, "unknown payload type: $type")
+                                    return@runBlocking
+                                }
+                            }
                         }
-                        val authId = BinaryUtils.readLe32(bytes8, 0)
-                        val authInfo = SessionManager.getAuthSession(bot, user.userId)
-                        if (authInfo == null) {
-                            errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
-                            return@runBlocking
-                        }
-                        AuthUserInterface.onBtnClick(bot, user, chatId, authInfo, bytes8, queryId)
                     } catch (e: Exception) {
                         Log.e(TAG, "onCallbackQuery, error: ${e.message}", e)
                         errorAlert(bot, queryId, e.toString())
@@ -346,6 +461,63 @@ class NeoAuth3Bot : PluginBase(),
             return true
         }
         return false
+    }
+
+    private suspend fun onAnonymousAdminCallback(
+        bot: Bot,
+        user: User,
+        chatId: Long,
+        bytes: ByteArray,
+        queryId: String
+    ) {
+        val aaaId = AnonymousAdminVerification.getIdFromMagicBytes(bytes)
+        val cmd = AnonymousAdminVerification.getCmdFromMagicBytes(bytes)
+        if (aaaId == 0 || cmd == 0 || chatId > 0) {
+            errorAlert(bot, queryId, "query data is invalid")
+            return
+        }
+        val r = ResImpl.getResourceForUser(user)
+        // check if the user is an admin
+        val gid = Bot.chatIdToGroupId(chatId)
+        val group = bot.resolveGroup(gid)
+        val isAdmin = group.isMemberHasAdminRight(bot, user.userId)
+        if (!isAdmin) {
+            errorAlert(bot, queryId, r.cb_query_nothing_to_do_with_you)
+            return
+        }
+        val session = mAnonymousAdminVerifications[aaaId]
+        if (session == null) {
+            errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
+            return
+        }
+        if (chatId != session.chatId) {
+            errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
+            return
+        }
+        when (cmd) {
+            1 -> {
+                AdminConfigInterface.onStartConfigCommand(bot, user, group, session.origMsgId)
+                mAnonymousAdminVerifications.remove(aaaId)
+                try {
+                    bot.deleteMessage(chatId, session.tmpMsgId)
+                } catch (ignored: RemoteApiException) {
+                    // ignore
+                }
+            }
+            2 -> {
+                // cancel
+                mAnonymousAdminVerifications.remove(aaaId)
+                try {
+                    bot.deleteMessage(chatId, session.tmpMsgId)
+                } catch (ignored: RemoteApiException) {
+                    // ignore
+                }
+            }
+            else -> {
+                errorAlert(bot, queryId, "unknown command: $cmd")
+                return
+            }
+        }
     }
 
     override fun onMemberJoinRequest(bot: Bot, chatId: Long, userId: Long, event: JsonObject): Boolean {
@@ -447,6 +619,14 @@ class NeoAuth3Bot : PluginBase(),
             return
         }
         scheduleCascadeDeleteMessage(chatId, origMsgId, this.id)
+    }
+
+    internal fun Job.logErrorIfFail() {
+        invokeOnCompletion {
+            if (it != null && it !is CancellationException) {
+                Log.e(TAG, "job error: ${it.message}", it)
+            }
+        }
     }
 
 }

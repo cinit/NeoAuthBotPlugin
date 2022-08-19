@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.util.UUID
+import java.util.*
 import kotlin.reflect.KMutableProperty1
 
 
@@ -74,7 +74,7 @@ object AdminConfigInterface {
         ) { it in 60..10800 },
     )
 
-    suspend fun onStartConfigCommand(bot: Bot, user: User, group: Group, msg: Message) {
+    suspend fun onStartConfigCommand(bot: Bot, user: User, group: Group, origMsgId: Long) {
         val chatId = Bot.groupIdToChatId(group.groupId)
         val botUserName = bot.username
         if (botUserName.isNullOrEmpty()) {
@@ -83,7 +83,7 @@ object AdminConfigInterface {
         // check whether the user is admin
         val isAdmin = group.isMemberHasAdminRight(bot, user.userId)
         if (!isAdmin) {
-            bot.sendMessageForText(chatId, "你不是群管理员, 不能使用本命令", replyMsgId = msg.id)
+            bot.sendMessageForText(chatId, "你不是群管理员, 不能使用本命令", replyMsgId = origMsgId)
             return
         } else {
             val key = UUID.randomUUID().toString()
@@ -100,7 +100,7 @@ object AdminConfigInterface {
                     )
                 )
             )
-            val tmpMsgId = bot.sendMessageForText(chatId, msgText, replyMarkup = replyMarkup, replyMsgId = msg.id)
+            val tmpMsgId = bot.sendMessageForText(chatId, msgText, replyMarkup = replyMarkup, replyMsgId = origMsgId)
             // schedule delete the message after 30 seconds
             bot.server.executor.execute {
                 try {

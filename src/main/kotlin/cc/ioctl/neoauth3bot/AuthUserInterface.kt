@@ -40,6 +40,7 @@ object AuthUserInterface {
         val numX = info.numCountX
         val numY = info.numCountY
         // { i32 id, u8 unused, u8 flags, u8 type, u8 pos }
+        // 8 bytes per button
         val bytes8 = ByteArray(8)
         val rows = ArrayList<Array<ReplyMarkup.InlineKeyboard.Button>>()
         for (y in 0 until numY) {
