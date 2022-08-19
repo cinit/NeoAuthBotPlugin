@@ -5,6 +5,7 @@ import cc.ioctl.neoauth3bot.chiral.MdlMolParser
 import cc.ioctl.neoauth3bot.chiral.Molecule
 import cc.ioctl.neoauth3bot.chiral.MoleculeRender
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
+import cc.ioctl.neoauth3bot.res.ResImpl
 import cc.ioctl.neoauth3bot.util.BinaryUtils
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.User
@@ -15,6 +16,7 @@ import cc.ioctl.telebot.util.Base64
 import cc.ioctl.telebot.util.Log
 import cc.ioctl.telebot.util.TokenBucket
 import java.io.File
+import java.util.*
 
 object AuthUserInterface {
 
@@ -34,6 +36,7 @@ object AuthUserInterface {
     }
 
     fun buildMatrixButtonMarkup(user: User, uniqueId: Int, info: SessionManager.UserAuthSession): ReplyMarkup {
+        val r = ResImpl.getResourceForUser(user)
         val numX = info.numCountX
         val numY = info.numCountY
         // { i32 id, u8 unused, u8 flags, u8 type, u8 pos }
@@ -65,9 +68,9 @@ object AuthUserInterface {
             rows.add(cols.toTypedArray())
         }
         val texts = arrayOf(
-            LocaleHelper.getBtnChangeQuizText(user),
-            LocaleHelper.getBtnResetText(user),
-            LocaleHelper.getBtnSubmitText(user)
+            r.btn_text_change_quiz,
+            r.btn_text_reset,
+            r.btn_text_submit
         )
         ArrayList<ReplyMarkup.InlineKeyboard.Button>().apply {
             for (i in texts.indices) {
@@ -99,6 +102,7 @@ object AuthUserInterface {
         queryId: String
     ) {
         var isInvalidateRequired: Boolean = false
+        val r = ResImpl.getResourceForUser(user)
         val msg: String
         val flags = bytes8[5].toInt()
         val type = bytes8[6].toInt()
@@ -124,17 +128,17 @@ object AuthUserInterface {
                 if (flags and 1 == 0) {
                     // unchecked -> checked
                     auth3Info.selectedRegion.add(x shl 4 or y)
-                    msg = LocaleHelper.getCallbackHintForSelectRegion(user, regionName)
+                    msg = r.format(r.cb_query_selected_va1, regionName)
                 } else {
                     // checked -> unchecked
                     auth3Info.selectedRegion.remove(x shl 4 or y)
-                    msg = LocaleHelper.getCallbackHintForUnselectRegion(user, regionName)
+                    msg = r.format(r.cb_query_unselected_va1, regionName)
                 }
                 isInvalidateRequired = true
             }
             BTN_TYPE_CHANGE -> {
                 // change request
-                errorAlert(bot, queryId, LocaleHelper.getCallbackHintForChangeRequestTodo(user))
+                errorAlert(bot, queryId, r.cb_query_change_quiz_wip)
                 return
             }
             BTN_TYPE_CLEAR -> {
@@ -143,7 +147,7 @@ object AuthUserInterface {
                     auth3Info.selectedRegion.clear()
                     isInvalidateRequired = true
                 }
-                msg = LocaleHelper.getCallbackHintForResetRegion(user)
+                msg = r.cb_query_reset_region
             }
             BTN_TYPE_SUBMIT -> {
                 // submit
@@ -164,10 +168,10 @@ object AuthUserInterface {
                 }
                 if (isCorrect) {
                     onAuthenticationSuccess(bot, user, chatId, auth3Info)
-                    bot.answerCallbackQuery(queryId, LocaleHelper.getAuthSuccessShortText(user), false)
+                    bot.answerCallbackQuery(queryId, r.cb_query_auth_pass, false)
                     return
                 } else {
-                    bot.answerCallbackQuery(queryId, LocaleHelper.getAuthFailWrongAnswerText(user), true)
+                    bot.answerCallbackQuery(queryId, r.cb_query_auth_fail_retry, true)
                 }
                 return
             }
@@ -205,14 +209,15 @@ object AuthUserInterface {
 
     suspend fun onStartAuthCommand(bot: Bot, chatId: Long, user: User, msg: Message, isForTest: Boolean) {
         val senderId = user.userId
+        val r = ResImpl.getResourceForUser(user)
         if (!checkAuthRate(senderId)) {
-            bot.sendMessageForText(chatId, LocaleHelper.getTooManyRequestsText(user))
+            bot.sendMessageForText(chatId, r.msg_text_too_many_requests)
             return
         }
         var auth3Info = SessionManager.getAuthSession(bot, senderId)
         val targetGid = auth3Info?.targetGroupId ?: 0L
         if (!isForTest && targetGid == 0L) {
-            bot.sendMessageForText(chatId, LocaleHelper.getNoAuthRequiredBczNoRequestText(user))
+            bot.sendMessageForText(chatId, r.msg_text_no_auth_required)
             return
         }
         if (auth3Info == null) {
@@ -229,7 +234,8 @@ object AuthUserInterface {
         requestMsgId: Long,
         previousMsgId: Long
     ) {
-        val tmpMsgId = bot.sendMessageForText(chatId, LocaleHelper.getLoadingText(user), replyMsgId = requestMsgId).id
+        val r = ResImpl.getResourceForUser(user)
+        val tmpMsgId = bot.sendMessageForText(chatId, r.msg_text_loading, replyMsgId = requestMsgId).id
         try {
             val authId = SessionManager.nextAuthSequence()
             val targetGid = auth3Info.targetGroupId
@@ -327,10 +333,11 @@ object AuthUserInterface {
         chatId: Long,
         auth3Info: SessionManager.UserAuthSession
     ) {
+        val r = ResImpl.getResourceForUser(user)
         val targetGroupId = auth3Info.targetGroupId
         val now = System.currentTimeMillis()
         val cost = ((now - auth3Info.authStartTime) / 1000).toInt()
-        bot.sendMessageForText(chatId, LocaleHelper.getAuthSuccessText(user, cost))
+        bot.sendMessageForText(chatId, String.format(Locale.ROOT, r.msg_text_auth_pass_va1, cost))
         bot.deleteMessage(chatId, auth3Info.originalMessageId)
         if (targetGroupId != 0L) {
             // approve user to join group
@@ -353,7 +360,7 @@ object AuthUserInterface {
         SessionManager.dropAuthSession(bot, auth3Info.userId)
         auth3Info.originalMessageId = 0L
         if (targetGroupId != 0L) {
-            bot.sendMessageForText(chatId, LocaleHelper.getApproveSuccessText(user))
+            bot.sendMessageForText(chatId, r.msg_text_approve_success)
         }
     }
 

@@ -1,6 +1,7 @@
 package cc.ioctl.neoauth3bot
 
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
+import cc.ioctl.neoauth3bot.res.ResImpl
 import cc.ioctl.neoauth3bot.svc.FilterService
 import cc.ioctl.neoauth3bot.svc.SysVmService
 import cc.ioctl.neoauth3bot.util.BinaryUtils
@@ -193,11 +194,12 @@ class NeoAuth3Bot : PluginBase(),
                     return@runBlocking true
                 }
                 val user = bot.resolveUser(senderId)
+                val r = ResImpl.getResourceForUser(user)
                 mPrivateMsgBpf.consume(senderId).also {
                     if (it < 0) {
                         return@runBlocking true
                     } else if (it == 0) {
-                        bot.sendMessageForText(chatId, LocaleHelper.getTooManyRequestsText(user))
+                        bot.sendMessageForText(chatId, r.msg_text_too_many_requests)
                             .scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     }
@@ -235,7 +237,7 @@ class NeoAuth3Bot : PluginBase(),
                         // in group chat
                         bot.sendMessageForText(
                             chatId,
-                            LocaleHelper.getCommandOnlyAvailableInPrivateChatText(user),
+                            r.msg_text_command_use_in_private_chat_only,
                             replyMsgId = msgId
                         ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
@@ -269,7 +271,7 @@ class NeoAuth3Bot : PluginBase(),
                     if (chatId > Bot.CHAT_ID_NEGATIVE_NOTATION) {
                         bot.sendMessageForText(
                             chatId,
-                            LocaleHelper.getPleaseUseCmdInGroupText(user),
+                            r.msg_text_command_use_in_group_only,
                             replyMsgId = msgId
                         ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
@@ -310,11 +312,12 @@ class NeoAuth3Bot : PluginBase(),
                 val rttiType = query["@type"].asString
                 if (rttiType == "updateNewCallbackQuery") {
                     val user = bot.resolveUser(senderId)
+                    val r = ResImpl.getResourceForUser(user)
                     mCallbackQueryBpf.consume(senderId).also {
                         if (it < 0) {
                             return@runBlocking
                         } else if (it == 0) {
-                            errorAlert(bot, queryId, LocaleHelper.getTooManyRequestsText(user))
+                            errorAlert(bot, queryId, r.msg_text_too_many_requests)
                             return@runBlocking
                         }
                     }
@@ -328,7 +331,7 @@ class NeoAuth3Bot : PluginBase(),
                         val authId = BinaryUtils.readLe32(bytes8, 0)
                         val authInfo = SessionManager.getAuthSession(bot, user.userId)
                         if (authInfo == null) {
-                            errorAlert(bot, queryId, LocaleHelper.getAuthSessionNotFoundForCallbackQueryText(user))
+                            errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
                             return@runBlocking
                         }
                         AuthUserInterface.onBtnClick(bot, user, chatId, authInfo, bytes8, queryId)
@@ -351,12 +354,13 @@ class NeoAuth3Bot : PluginBase(),
             val gid = Bot.chatIdToGroupId(chatId)
             val group = bot.resolveGroup(gid)
             val user = bot.resolveUser(userId)
+            val r = ResImpl.getResourceForUser(user)
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
                 // make TDLib know the PM chat before send msg
                 bot.resolveChat(userId)
                 val originHintMsgId = bot.sendMessageForText(
                     userId,
-                    LocaleHelper.getJoinRequestAuthRequiredText(user, group)
+                    r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
                 )
                 Log.i(TAG, "send user join request msg to user: $userId, group: $gid")
                 val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
