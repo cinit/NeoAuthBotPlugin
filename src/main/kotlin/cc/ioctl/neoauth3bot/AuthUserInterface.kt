@@ -194,7 +194,7 @@ object AuthUserInterface {
                     chatId,
                     auth3Info.originalMessageId,
                     LocaleHelper.createFormattedMsgText(auth3Info, user, maxDuration),
-                    AuthUserInterface.buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
+                    buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
                 )
             }
             bot.answerCallbackQuery(queryId, msg, false)
@@ -242,7 +242,7 @@ object AuthUserInterface {
             val targetGid = auth3Info.targetGroupId
             auth3Info.authStatus = SessionManager.AuthStatus.AUTHENTICATING
             val groupConfig = if (targetGid > 0) {
-                val group = bot.resolveGroup(targetGid)
+                val group = bot.getGroup(targetGid)
                 SessionManager.getOrCreateGroupConfig(bot, group)
             } else null
             Log.d(TAG, "startNewAuth: authId: $authId, user: ${user.userId}, gid: ${targetGid}")
@@ -340,28 +340,36 @@ object AuthUserInterface {
         val cost = ((now - auth3Info.authStartTime) / 1000).toInt()
         bot.sendMessageForText(chatId, String.format(Locale.ROOT, r.msg_text_auth_pass_va1, cost))
         bot.deleteMessage(chatId, auth3Info.originalMessageId)
+        var isApprovalFailure = false
         if (targetGroupId != 0L) {
             // approve user to join group
             val targetChatId = Bot.groupIdToChatId(targetGroupId)
             // resolve chat and user to make TDLib happy
-            bot.resolveChat(targetChatId)
-            bot.resolveUser(auth3Info.userId)
+            bot.getChat(targetChatId)
+            bot.getUser(auth3Info.userId)
             try {
                 bot.processChatJoinRequest(targetChatId, auth3Info.userId, true)
+                Log.d(TAG, "approved user ${auth3Info.userId} into group ${targetGroupId}")
             } catch (e: RemoteApiException) {
                 if (e.message?.contains("USER_ALREADY_PARTICIPANT") == true) {
                     // ignore
+                } else if (e.message?.contains("HIDE_REQUESTER_MISSING") == true) {
+                    isApprovalFailure = true
+                    ChannelLog.onHideRequesterMissing(bot, bot.getGroup(targetGroupId), user.userId)
                 } else {
                     // rethrow
                     throw e
                 }
             }
         }
-        Log.d(TAG, "approved user ${auth3Info.userId} into group ${targetGroupId}")
-        SessionManager.dropAuthSession(bot, auth3Info.userId)
-        auth3Info.originalMessageId = 0L
-        if (targetGroupId != 0L) {
-            bot.sendMessageForText(chatId, r.msg_text_approve_success)
+        if (!isApprovalFailure) {
+            SessionManager.dropAuthSession(bot, auth3Info.userId)
+            auth3Info.originalMessageId = 0L
+            if (targetGroupId != 0L) {
+                bot.sendMessageForText(chatId, r.msg_text_approve_success)
+            }
+        } else {
+            bot.sendMessageForText(chatId, r.msg_text_error_denied_by_other_admin)
         }
     }
 

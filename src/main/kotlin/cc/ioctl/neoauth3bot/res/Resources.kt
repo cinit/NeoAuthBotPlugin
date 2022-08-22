@@ -22,6 +22,7 @@ interface Resources {
 
     val msg_text_auth_pass_va1: String
     val msg_text_approve_success: String
+    val msg_text_error_denied_by_other_admin: String
     val msg_text_join_auth_required_notice_va2: String
     val msg_text_too_many_requests: String
     val msg_text_loading: String

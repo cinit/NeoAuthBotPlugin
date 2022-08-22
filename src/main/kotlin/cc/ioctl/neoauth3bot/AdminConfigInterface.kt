@@ -81,7 +81,7 @@ object AdminConfigInterface {
             throw IllegalStateException("bot user name is null")
         }
         // check whether the user is admin
-        val isAdmin = group.isMemberHasAdminRight(bot, user.userId)
+        val isAdmin = group.isMemberAdministrative(bot, user.userId)
         if (!isAdmin) {
             bot.sendMessageForText(chatId, "你不是群管理员, 不能使用本命令", replyMsgId = origMsgId)
             return
@@ -137,7 +137,7 @@ object AdminConfigInterface {
             return
         }
         val groupId = adminSession.groupId
-        val group = bot.resolveGroup(adminSession.groupId)
+        val group = bot.getGroup(adminSession.groupId)
         val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
         val msgBody: FormattedTextBuilder = FormattedTextBuilder().apply {
             this + "配置 " + group.name + " (" + Code(groupId.toString()) + ")\n\n"
@@ -234,7 +234,7 @@ object AdminConfigInterface {
             return
         }
         val groupId = adminSession.groupId
-        val group = bot.resolveGroup(adminSession.groupId)
+        val group = bot.getGroup(adminSession.groupId)
         val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
         val prop = configProperties[idx]
         val valueStr = getConfigValue(groupConfig, prop).toString()

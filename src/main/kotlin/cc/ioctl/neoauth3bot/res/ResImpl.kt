@@ -24,13 +24,14 @@ object ResImpl {
 
         override val msg_text_auth_pass_va1 = "验证通过，用时 %d 秒。"
         override val msg_text_approve_success = "您应该已经是群成员了。"
+        override val msg_text_error_denied_by_other_admin = "您的申请已被其他管理员拒绝。"
         override val msg_text_join_auth_required_notice_va2 = "欢迎 %1\$s 申请加入群组 %2\$s ，" +
                 "本群已开启验证，请发送 /ccg 开始验证，完成验证后即可加入。"
         override val msg_text_too_many_requests = "您的操作过于频繁，请稍后再试。"
         override val msg_text_loading = "正在加载..."
         override val msg_text_no_auth_required = "您没有申请加入任何群，不需要验证。"
         override val msg_text_command_use_in_group_only = "请在群组中使用本命令。"
-        override val msg_text_command_use_in_private_chat_only = "该命令只能在私聊中使用。";
+        override val msg_text_command_use_in_private_chat_only = "该命令只能在私聊中使用。"
 
         override val cb_query_auth_session_not_found = "太久远了，找不到了。"
         override val cb_query_auth_fail_retry = "验证失败，请重试。"
@@ -92,6 +93,7 @@ object ResImpl {
 
         override val msg_text_auth_pass_va1 = "Authentication passed within %d seconds."
         override val msg_text_approve_success = "You should have been approved into the group."
+        override val msg_text_error_denied_by_other_admin = "Your request was denied by an admin."
         override val msg_text_join_auth_required_notice_va2 = "Thank you for your group join request.\n" +
                 "Group %2\$s has anti-spam CAPTCHA enabled. Please send /ccg to complete the CAPTCHA."
         override val msg_text_too_many_requests = "Too many requests. Please try again later."

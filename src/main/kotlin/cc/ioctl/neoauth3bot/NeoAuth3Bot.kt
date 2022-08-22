@@ -292,7 +292,7 @@ class NeoAuth3Bot : PluginBase(),
                 if (!msgText.startsWith("/")) {
                     return@runBlocking true
                 }
-                val user = bot.resolveUser(senderId)
+                val user = bot.getUser(senderId)
                 val r = ResImpl.getResourceForUser(user)
                 mPrivateMsgBpf.consume(senderId).also {
                     if (it < 0) {
@@ -318,7 +318,7 @@ class NeoAuth3Bot : PluginBase(),
                 } else if (message.content.toString().contains("\"/group_id")) {
                     try {
                         val gid = Bot.chatIdToGroupId(chatId)
-                        val group = bot.resolveGroup(gid)
+                        val group = bot.getGroup(gid)
                         bot.sendMessageForText(
                             chatId,
                             "Group ID: ${group.groupId}\nGroup Name: ${group.name}",
@@ -376,7 +376,7 @@ class NeoAuth3Bot : PluginBase(),
                         return@runBlocking true
                     } else {
                         val gid = Bot.chatIdToGroupId(chatId)
-                        val group = bot.resolveGroup(gid)
+                        val group = bot.getGroup(gid)
                         AdminConfigInterface.onStartConfigCommand(bot, user, group, message.id)
                         return@runBlocking true
                     }
@@ -410,7 +410,7 @@ class NeoAuth3Bot : PluginBase(),
             runBlocking {
                 val rttiType = query["@type"].asString
                 if (rttiType == "updateNewCallbackQuery") {
-                    val user = bot.resolveUser(senderId)
+                    val user = bot.getUser(senderId)
                     val r = ResImpl.getResourceForUser(user)
                     mCallbackQueryBpf.consume(senderId).also {
                         if (it < 0) {
@@ -479,8 +479,8 @@ class NeoAuth3Bot : PluginBase(),
         val r = ResImpl.getResourceForUser(user)
         // check if the user is an admin
         val gid = Bot.chatIdToGroupId(chatId)
-        val group = bot.resolveGroup(gid)
-        val isAdmin = group.isMemberHasAdminRight(bot, user.userId)
+        val group = bot.getGroup(gid)
+        val isAdmin = group.isMemberAdministrative(bot, user.userId)
         if (!isAdmin) {
             errorAlert(bot, queryId, r.cb_query_nothing_to_do_with_you)
             return
@@ -524,12 +524,12 @@ class NeoAuth3Bot : PluginBase(),
         Log.d(TAG, "onMemberJoinRequest: chatId: $chatId, userId: $userId")
         runBlocking {
             val gid = Bot.chatIdToGroupId(chatId)
-            val group = bot.resolveGroup(gid)
-            val user = bot.resolveUser(userId)
+            val group = bot.getGroup(gid)
+            val user = bot.getUser(userId)
             val r = ResImpl.getResourceForUser(user)
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
                 // make TDLib know the PM chat before send msg
-                bot.resolveChat(userId)
+                bot.getChat(userId)
                 val originHintMsgId = bot.sendMessageForText(
                     userId,
                     r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
