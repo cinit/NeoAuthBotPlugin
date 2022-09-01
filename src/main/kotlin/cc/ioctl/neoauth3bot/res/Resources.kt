@@ -29,6 +29,9 @@ interface Resources {
     val msg_text_command_use_in_group_only: String
     val msg_text_command_use_in_private_chat_only: String
     val msg_text_no_auth_required: String
+    val msg_text_approved_manually_by_admin_va1: String
+    val msg_text_dismissed_manually_by_admin_va1: String
+    val msg_text_banned_manually_by_admin_va1: String
 
     val cb_query_auth_session_not_found: String
     val cb_query_auth_fail_retry: String

@@ -156,7 +156,6 @@ object AuthUserInterface {
                     it.sort()
                 }
                 val expected = auth3Info.actualChiralRegion
-                Log.d(TAG, "got: $got, expected: $expected")
                 var isCorrect = false
                 if (got.size == expected.size) {
                     isCorrect = true
@@ -168,8 +167,15 @@ object AuthUserInterface {
                     }
                 }
                 if (isCorrect) {
-                    onAuthenticationSuccess(bot, user, chatId, auth3Info)
-                    bot.answerCallbackQuery(queryId, r.cb_query_auth_pass, false)
+                    Log.d(TAG, "user $user got the correct answer")
+                    try {
+                        onAuthenticationSuccess(bot, user, chatId, auth3Info)
+                        bot.answerCallbackQuery(queryId, r.cb_query_auth_pass, false)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "onAuthenticationSuccess: $e", e)
+                        ChannelLog.onError(TAG, bot, e)
+                        bot.answerCallbackQuery(queryId, e.toString(), true)
+                    }
                     return
                 } else {
                     bot.answerCallbackQuery(queryId, r.cb_query_auth_fail_retry, true)
@@ -189,7 +195,7 @@ object AuthUserInterface {
                 val targetGid = auth3Info.targetGroupId
                 val groupConfig = SessionManager.getGroupConfig(bot, targetGid)
                 val maxDuration = groupConfig?.authProcedureTimeoutSeconds ?: 600
-                bot.resolveMessage(chatId, auth3Info.originalMessageId, false)
+                bot.getMessage(chatId, auth3Info.originalMessageId, false)
                 bot.editMessageCaption(
                     chatId,
                     auth3Info.originalMessageId,

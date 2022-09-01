@@ -32,6 +32,9 @@ object ResImpl {
         override val msg_text_no_auth_required = "您没有申请加入任何群，不需要验证。"
         override val msg_text_command_use_in_group_only = "请在群组中使用本命令。"
         override val msg_text_command_use_in_private_chat_only = "该命令只能在私聊中使用。"
+        override val msg_text_approved_manually_by_admin_va1 = "您的加群申请已被 %1\$s 的管理员人工通过。"
+        override val msg_text_dismissed_manually_by_admin_va1 = "抱歉，您的加群申请已被 %1\$s 的管理员人工拒绝。"
+        override val msg_text_banned_manually_by_admin_va1 = "抱歉，您已被 %1\$s 的管理员人工封禁。"
 
         override val cb_query_auth_session_not_found = "太久远了，找不到了。"
         override val cb_query_auth_fail_retry = "验证失败，请重试。"
@@ -102,6 +105,12 @@ object ResImpl {
             "No authentication required because you did not request to join a group."
         override val msg_text_command_use_in_group_only = "Please use this command in the group."
         override val msg_text_command_use_in_private_chat_only = "This command can only be used in private chat."
+        override val msg_text_approved_manually_by_admin_va1 =
+            "You have been approved by an admin into the group %1\$s."
+        override val msg_text_dismissed_manually_by_admin_va1 =
+            "Sorry, your request has been denied by an admin of %1\$s."
+        override val msg_text_banned_manually_by_admin_va1 =
+            "Sorry, you have been banned by an admin of %1\$s."
 
         override val cb_query_auth_session_not_found = "Session not found or lost. (Try to restart authentication.)"
         override val cb_query_auth_fail_retry = "Wrong answer. Please check your answer and try again."
