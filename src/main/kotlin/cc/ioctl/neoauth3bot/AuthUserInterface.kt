@@ -361,6 +361,7 @@ object AuthUserInterface {
                     throw e
                 }
             }
+            ChannelLog.onAuthPassed(bot, bot.getGroup(targetGroupId), user.userId)
         }
         if (!isApprovalFailure) {
             SessionManager.dropAuthSession(bot, auth3Info.userId)

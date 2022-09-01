@@ -41,6 +41,7 @@ class NeoAuth3Bot : PluginBase(),
     private val mNextAnonymousAdminVerificationId = AtomicInteger(1)
     private val mAnonymousAdminVerifications = HashMap<Int, AnonymousAdminVerification>(1)
     private val mCascadeDeleteMsgLock = Any()
+    private var mDefaultLogChannelId: Long = 0L
     private val mCascadeDeleteMsg = object : LinkedHashMap<String, Long>() {
         // 1000 elements max
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>): Boolean {
@@ -164,6 +165,7 @@ class NeoAuth3Bot : PluginBase(),
         if (mBotUsername.isNullOrEmpty()) {
             throw IllegalStateException("bot $bot has no username")
         }
+        runBlocking { ChannelLog.setDefaultLogChannelId(bot, mDefaultLogChannelId) }
         bot.registerOnReceiveMessageListener(this)
         bot.registerCallbackQueryListener(this)
         bot.registerGroupMemberJoinRequestListenerV1(this)
@@ -528,6 +530,7 @@ class NeoAuth3Bot : PluginBase(),
             val user = bot.getUser(userId)
             val r = ResImpl.getResourceForUser(user)
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
+                ChannelLog.onJoinRequest(bot, group, userId)
                 // make TDLib know the PM chat before send msg
                 bot.getChat(userId)
                 val originHintMsgId = bot.sendMessageForText(
@@ -545,6 +548,7 @@ class NeoAuth3Bot : PluginBase(),
                         if (authSession != null) {
                             if (authSession.currentAuthId == 0 && authSession.authStatus == SessionManager.AuthStatus.REQUESTED) {
                                 Log.i(TAG, "dismiss timeout join request: $userId, group: $gid")
+                                ChannelLog.onStartAuthTimeout(bot, group, userId)
                                 // drop the auth session if the user didn't start auth in time
                                 SessionManager.dropAuthSession(bot, userId)
                                 // delete the msg and dismiss the request
