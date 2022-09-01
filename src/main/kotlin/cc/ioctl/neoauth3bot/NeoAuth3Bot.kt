@@ -133,6 +133,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         val candidatePath: String? = cfg.getString("candidate_path")
         val botUid = cfg.getLong("bot_uid", 0)
         mDefaultLogChannelId = cfg.getLong("default_log_channel_id", 0)
+        LocaleHelper.discussionGroupLink = cfg.getString("discussion_group_link", null)
         mHypervisorIds.clear()
         cfg.getList<Long>("hypervisor_ids").forEach { id ->
             if (!Bot.isTrivialUserSender(id) && !Bot.isAnonymousSender(id)) {
@@ -177,6 +178,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         Log.e(TAG, "candidate_path = \"/path/to/candidate\"")
         Log.e(TAG, "hypervisor_ids = [ids of hypervisors]")
         Log.e(TAG, "default_log_channel_id = channel_id (which is greater than 0)")
+        Log.e(TAG, "discussion_group_link = \"Your discussion group link, optional\"")
         Log.e(TAG, "NeoAuth3Bot not loaded correctly.")
         Log.e(TAG, "Aborting...")
     }

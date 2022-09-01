@@ -66,6 +66,7 @@ object ResImpl {
                     "并给机器人 can_invite_users (必须, 添加成员/生成邀请链接) " +
                     "和 can_delete_messages (删除消息, 推荐, 但不是必须) 管理员权限(其他权限不需要)。\n" +
                     "目前仍在开发阶段, 十分不稳定, 提供 0% 的 SLA."
+        override val help_about_discussion_group_link_va1 = "反馈交流群: %s"
 
         override val btn_text_verify_anony_identity = "点此验证"
         override val msg_text_anonymous_admin_identity_verification_required =
@@ -143,6 +144,7 @@ object ResImpl {
                 "with can_invite_users (required) and can_delete_messages (recommended, but not necessary) " +
                 "permissions (other permissions are not required).\n" +
                 "Currently, the bot is still under development, providing 0% SLA."
+        override val help_about_discussion_group_link_va1 = "Feedback group: %s"
 
         override val btn_text_verify_anony_identity = "Click To Verify"
         override val msg_text_anonymous_admin_identity_verification_required = "You are now as an anonymous admin.\n" +

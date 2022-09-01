@@ -55,6 +55,7 @@ interface Resources {
     val help_about_desc2_part1: String
     val help_about_desc2_part2: String
     val help_about_desc3: String
+    val help_about_discussion_group_link_va1: String
 
     val btn_text_verify_anony_identity: String
     val msg_text_anonymous_admin_identity_verification_required: String

@@ -9,6 +9,8 @@ import cc.ioctl.telebot.tdlib.tlrpc.api.msg.FormattedTextBuilder
 @Suppress("unused")
 object LocaleHelper {
 
+    internal var discussionGroupLink: String? = null
+
     fun createFormattedMsgText(
         info: SessionManager.UserAuthSession,
         user: User,
@@ -67,7 +69,10 @@ object LocaleHelper {
                     r.help_about_desc2_part1 +
                     "https://github.com/cinit/NeoAuthBotPlugin" +
                     r.help_about_desc2_part2 + "\n" +
-                    r.help_about_desc3
+                    r.help_about_desc3 +
+                    if (!discussionGroupLink.isNullOrEmpty()) {
+                        "\n" + r.format(r.help_about_discussion_group_link_va1, discussionGroupLink!!)
+                    } else ""
         }.build()
     }
 }
