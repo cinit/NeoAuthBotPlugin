@@ -110,7 +110,7 @@ object ChannelLog {
                 this + Bold(key) + ": " + value + "\n"
             }
         }.build()
-        bot.sendMessageForText(channel.chatId, msgBody, options = JsonObject().apply {
+        bot.sendMessageForText(channel.sessionInfo, msgBody, options = JsonObject().apply {
             addProperty("@type", "messageSendOptions")
             addProperty("disable_notification", true)
         })
@@ -236,7 +236,7 @@ object ChannelLog {
                 try {
                     getErrorLogChannel(bot)?.let {
                         val msg = "#ERROR\n$tag: $errMsg\n\n$timeString"
-                        bot.sendMessageForText(it.chatId, msg)
+                        bot.sendMessageForText(it.sessionInfo, msg)
                     }
                 } catch (e: Exception) {
                     // sigh

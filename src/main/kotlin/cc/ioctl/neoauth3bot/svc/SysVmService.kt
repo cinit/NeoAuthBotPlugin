@@ -3,20 +3,21 @@ package cc.ioctl.neoauth3bot.svc
 import cc.ioctl.neoauth3bot.HypervisorCommandHandler
 import cc.ioctl.neoauth3bot.NeoAuth3Bot
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.obj.SessionInfo
 
 object SysVmService : HypervisorCommandHandler.HvCmdCallback {
 
     override suspend fun onSupervisorCommand(
         bot: Bot,
-        chatId: Long,
+        si: SessionInfo,
         senderId: Long,
-        cmd: String,
+        serviceCmd: String,
         args: Array<String>
     ): String {
-        when (cmd) {
+        when (serviceCmd) {
             "exit" -> {
                 System.exit(0)
-                throw IllegalStateException()
+                error("System.exit() returned")
             }
             else -> {
                 return "ENOSYS"

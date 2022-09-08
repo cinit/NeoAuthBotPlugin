@@ -9,12 +9,17 @@ import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
 import cc.ioctl.telebot.startup.BotStartupMain
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.obj.SessionInfo
 import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.RemoteApiException
+import cc.ioctl.telebot.tdlib.tlrpc.api.channel.ChannelMemberStatusEvent
+import cc.ioctl.telebot.tdlib.tlrpc.api.channel.ChatJoinRequest
+import cc.ioctl.telebot.tdlib.tlrpc.api.channel.ChatPermissions
+import cc.ioctl.telebot.tdlib.tlrpc.api.channel.MemberStatus
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.Message
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.ReplyMarkup
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.inlineKeyboardCallbackButton
-import cc.ioctl.telebot.util.Base64
+import cc.ioctl.telebot.tdlib.tlrpc.api.query.CallbackQuery
 import cc.ioctl.telebot.util.Log
 import cc.ioctl.telebot.util.TokenBucket
 import cc.ioctl.telebot.util.postDelayed
@@ -26,8 +31,8 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
-class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.CallbackQueryListenerV1,
-    EventHandler.GroupMemberJoinRequestListenerV1, EventHandler.GroupPermissionListenerV1 {
+class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.CallbackQueryListenerV2,
+    EventHandler.GroupMemberJoinRequestListenerV2, EventHandler.GroupPermissionListenerV2 {
 
     private lateinit var mBot: Bot
     private var mBotUid: Long = 0
@@ -48,7 +53,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
     }
 
     data class AnonymousAdminVerification(
-        val id: Int, val chatId: Long, val origMsgId: Long, var tmpMsgId: Long = 0
+        val id: Int, val si: SessionInfo, val origMsgId: Long, var tmpMsgId: Long = 0
     ) {
         fun getMagicBytes(cmd: Int): ByteArray {
             val type = 3
@@ -136,10 +141,10 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         LocaleHelper.discussionGroupLink = cfg.getString("discussion_group_link", null)
         mHypervisorIds.clear()
         cfg.getList<Long>("hypervisor_ids").forEach { id ->
-            if (!Bot.isTrivialUserSender(id) && !Bot.isAnonymousSender(id)) {
+            if (!SessionInfo.isTrivialUserSender(id) && !SessionInfo.isAnonymousSender(id)) {
                 Log.e(TAG, "Invalid hypervisor user id: $id")
             } else {
-                if (Bot.isAnonymousSender(id)) {
+                if (SessionInfo.isAnonymousSender(id)) {
                     Log.w(TAG, "Using anonymous hypervisor id($id) is discouraged")
                 }
                 mHypervisorIds.add(id)
@@ -155,18 +160,22 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
     }
 
     override fun onLoginFinish(bots: Map<Long, Bot>) {
-        val bot = bots[mBotUid] ?: throw IllegalStateException("bot not found with uid $mBotUid")
+        val bot = bots[mBotUid] ?: error("bot not found with uid $mBotUid")
         mBot = bot
         Log.i(TAG, "bot: $bot")
         mBotUsername = bot.username
-        if (mBotUsername.isNullOrEmpty()) {
-            throw IllegalStateException("bot $bot has no username")
-        }
+        check(mBotUsername?.isNotEmpty() == true) { "bot $bot has no username" }
         runBlocking { ChannelLog.setDefaultLogChannelId(bot, mDefaultLogChannelId) }
         bot.registerOnReceiveMessageListener(this)
         bot.registerCallbackQueryListener(this)
         bot.registerGroupMemberJoinRequestListenerV1(this)
         bot.registerGroupEventListener(this)
+//        server.executeRequestBlocking(JsonObject().apply {
+//            addProperty("@type","searchPublicChat")
+//            addProperty("username","Telegrzm")
+//        }.toString(), bot, server.defaultTimeout).let {
+//            Log.d(TAG, "ret: $it")
+//        }
     }
 
     private fun askUserToUpdateConfigFile() {
@@ -183,28 +192,28 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         Log.e(TAG, "Aborting...")
     }
 
-    override fun onReceiveMessage(bot: Bot, chatId: Long, senderId: Long, message: Message): Boolean {
+    override fun onReceiveMessage(bot: Bot, si: SessionInfo, senderId: Long, message: Message): Boolean {
         if (bot != mBot) {
             return false
         }
         val msgId = message.id
         if (message.date < SYNC_START_TIME / 1000L) {
-            Log.d(TAG, "message chatId $chatId senderId $senderId msgId $msgId is too old, ignore")
+            Log.d(TAG, "message $si senderId $senderId msgId $msgId is too old, ignore")
             return true
         }
-        if ((chatId == senderId && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
+        if ((si.isTrivialPrivateChat && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
             if (mAntiShockBpf.consume(0) < 0) {
-                Log.w(TAG, "onReceiveMessage: anti-shock filter failed: chatId=$chatId, senderId=$senderId")
+                Log.w(TAG, "onReceiveMessage: anti-shock filter failed: $si, senderId=$senderId")
                 return true
             }
             return runBlocking {
-                if (senderId == chatId && FilterService.isBlocked(senderId)) {
+                if (si.isTrivialPrivateChat && FilterService.isBlocked(senderId)) {
                     // ignore messages from blocked users
                     return@runBlocking true
                 }
                 val msgText = message.content.get("text")?.asJsonObject?.get("text")?.asString
                 if (msgText == null) {
-                    val d = "onReceiveMessage start, chatId: $chatId, senderId: $senderId, msgId: $msgId, msgType: ${
+                    val d = "onReceiveMessage start, $si, senderId: $senderId, msgId: $msgId, msgType: ${
                         message.content.get("@type").asString
                     }"
                     Log.d(TAG, d)
@@ -214,8 +223,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     val dumpShowMsg = msgText.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t").let {
                         it.substring(0, it.length.coerceAtMost(150))
                     }
-                    val d =
-                        "onReceiveMessage start, chatId: $chatId, senderId: $senderId, " + "msgId: $msgId, msgText: $dumpShowMsg"
+                    val d = "onReceiveMessage start, $si, senderId: $senderId, msgId: $msgId, msgText: $dumpShowMsg"
                     Log.d(TAG, d)
                 }
                 if (mHypervisorIds.contains(senderId)) {
@@ -225,7 +233,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                             val parts = body.split(" ")
                             if (parts.size < 3) {
                                 bot.sendMessageForText(
-                                    chatId, "Invalid argument. Usage: /hvcmd SERVICE CMD [ARGS...]", replyMsgId = msgId
+                                    si, "Invalid argument. Usage: /hvcmd SERVICE CMD [ARGS...]", replyMsgId = msgId
                                 ).scheduledCascadeDelete(msgId)
                             } else {
                                 val svc = parts[1]
@@ -234,12 +242,12 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                                 try {
                                     Log.d(TAG, "hvcmd $senderId: $svc $cmd $args")
                                     HypervisorCommandHandler.onSupervisorCommand(
-                                        bot, chatId, senderId, svc, cmd, args.toTypedArray(), msgId
+                                        bot, si, senderId, svc, cmd, args.toTypedArray(), msgId
                                     )
                                 } catch (e: Exception) {
                                     Log.e(TAG, "exec hv cmd '$msgText': $e", e)
                                     bot.sendMessageForText(
-                                        chatId, e.message ?: e.toString(), replyMsgId = msgId
+                                        si, e.message ?: e.toString(), replyMsgId = msgId
                                     ).scheduledCascadeDelete(msgId)
                                 }
                             }
@@ -248,13 +256,13 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     }
                 }
                 if (senderId < 0) {
-                    if (senderId == chatId) {
+                    if (si.isGroupOrChannel && senderId == -si.id) {
                         if (msgText.startsWith("/config")) {
                             val aaaId = mNextAnonymousAdminVerificationId.getAndIncrement()
-                            val session = AnonymousAdminVerification(aaaId, chatId, msgId)
+                            val session = AnonymousAdminVerification(aaaId, si, msgId)
                             val r = ResImpl.eng
                             val tmpMsgId = bot.sendMessageForText(
-                                chatId,
+                                si,
                                 r.msg_text_anonymous_admin_identity_verification_required,
                                 replyMsgId = msgId,
                                 replyMarkup = ReplyMarkup.InlineKeyboard(
@@ -275,7 +283,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                             postDelayed(30_000) {
                                 mAnonymousAdminVerifications.remove(aaaId)
                                 try {
-                                    bot.deleteMessage(chatId, tmpMsgId.id)
+                                    bot.deleteMessage(si, tmpMsgId.id)
                                 } catch (e: RemoteApiException) {
                                     Log.i(TAG, "deleteMessage failed: $e")
                                 }
@@ -293,43 +301,43 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     if (it < 0) {
                         return@runBlocking true
                     } else if (it == 0) {
-                        bot.sendMessageForText(chatId, r.msg_text_too_many_requests).scheduledCascadeDelete(msgId)
+                        bot.sendMessageForText(si, r.msg_text_too_many_requests).scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     }
                 }
                 if (message.content.toString().contains("\"/help")) {
                     bot.sendMessageForText(
-                        chatId, LocaleHelper.getBotHelpInfoFormattedText(bot, user), replyMsgId = msgId
+                        si, LocaleHelper.getBotHelpInfoFormattedText(bot, user), replyMsgId = msgId
                     ).scheduledCascadeDelete(msgId)
                 } else if (msgText.startsWith("/uptime")) {
-                    bot.sendMessageForText(chatId, SysVmService.getUptimeString(), replyMsgId = msgId)
+                    bot.sendMessageForText(si, SysVmService.getUptimeString(), replyMsgId = msgId)
                         .scheduledCascadeDelete(msgId)
                 } else if (message.content.toString().contains("\"/about")) {
-                    bot.sendMessageForText(chatId, LocaleHelper.getBotAboutInfoFormattedText(user), replyMsgId = msgId)
+                    bot.sendMessageForText(si, LocaleHelper.getBotAboutInfoFormattedText(user), replyMsgId = msgId)
                         .scheduledCascadeDelete(msgId)
                 } else if (message.content.toString().contains("\"/group_id")) {
                     try {
-                        val gid = Bot.chatIdToGroupId(chatId)
-                        val group = bot.getGroup(gid)
+                        val group = bot.getGroup(si.id)
                         bot.sendMessageForText(
-                            chatId, "Group ID: ${group.groupId}\nGroup Name: ${group.name}", replyMsgId = msgId
+                            si, "Group ID: ${group.groupId}\nGroup Name: ${group.name}", replyMsgId = msgId
                         ).scheduledCascadeDelete(msgId)
                     } catch (e: Exception) {
-                        bot.sendMessageForText(chatId, e.message ?: e.toString(), replyMsgId = msgId)
+                        bot.sendMessageForText(si, e.message ?: e.toString(), replyMsgId = msgId)
                             .scheduledCascadeDelete(msgId)
                     }
                 } else if (message.content.toString()
-                        .contains("\"/cc1") || (chatId == senderId && message.content.toString().contains("\"/ccg"))
+                        .contains("\"/cc1") || (si.isTrivialPrivateChat && message.content.toString()
+                        .contains("\"/ccg"))
                 ) {
-                    if (!Bot.isTrivialPrivateChat(chatId)) {
+                    if (!si.isTrivialPrivateChat) {
                         // in group chat
                         bot.sendMessageForText(
-                            chatId, r.msg_text_command_use_in_private_chat_only, replyMsgId = msgId
+                            si, r.msg_text_command_use_in_private_chat_only, replyMsgId = msgId
                         ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     } else {
                         val isForTest = !message.content.toString().contains("\"/ccg")
-                        AuthUserInterface.onStartAuthCommand(bot, chatId, user, message, isForTest)
+                        AuthUserInterface.onStartAuthCommand(bot, si, user, message, isForTest)
                     }
                 } else if (msgText.startsWith("/start")) {
                     if (msgText.length > "/start".length) {
@@ -337,36 +345,36 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                         when (arg.split("_")[0]) {
                             "admincfg" -> {
                                 val sid = arg.split("_")[1]
-                                AdminConfigInterface.onStartConfigInterface(bot, chatId, user, message, sid)
+                                AdminConfigInterface.onStartConfigInterface(bot, si, user, message, sid)
                                 return@runBlocking true
                             }
                             "admincfgedit" -> {
                                 val sid = arg.split("_")[1]
                                 val idx = arg.split("_")[2].toInt()
-                                AdminConfigInterface.onStartEditValueInterface(bot, chatId, user, message, sid, idx)
+                                AdminConfigInterface.onStartEditValueInterface(bot, si, user, message, sid, idx)
                                 return@runBlocking true
                             }
                             else -> {
-                                bot.sendMessageForText(chatId, "Unknown command", replyMsgId = msgId)
+                                bot.sendMessageForText(si, "Unknown command", replyMsgId = msgId)
                                     .scheduledCascadeDelete(msgId)
                                 return@runBlocking true
                             }
                         }
                     }
                 } else if (message.content.toString().contains("\"/config")) {
-                    if (chatId > Bot.CHAT_ID_NEGATIVE_NOTATION) {
+                    if (!si.isGroupOrChannel) {
                         bot.sendMessageForText(
-                            chatId, r.msg_text_command_use_in_group_only, replyMsgId = msgId
+                            si, r.msg_text_command_use_in_group_only, replyMsgId = msgId
                         ).scheduledCascadeDelete(msgId)
                         return@runBlocking true
                     } else {
-                        val gid = Bot.chatIdToGroupId(chatId)
+                        val gid = si.id
                         val group = bot.getGroup(gid)
                         AdminConfigInterface.onStartConfigCommand(bot, user, group, message.id)
                         return@runBlocking true
                     }
                 } else {
-                    bot.sendMessageForText(chatId, "Unknown command.", replyMsgId = msgId).scheduledCascadeDelete(msgId)
+                    bot.sendMessageForText(si, "Unknown command.", replyMsgId = msgId).scheduledCascadeDelete(msgId)
                 }
                 return@runBlocking true
             }
@@ -374,67 +382,65 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         return false
     }
 
-    private suspend fun errorAlert(bot: Bot, queryId: String, msg: String) {
+    private suspend fun errorAlert(bot: Bot, queryId: Long, msg: String) {
         bot.answerCallbackQuery(queryId, msg, true)
     }
 
     override fun onCallbackQuery(
-        bot: Bot, query: JsonObject, queryId: String, chatId: Long, senderId: Long, msgId: Long
+        bot: Bot, query: CallbackQuery
     ): Boolean {
+        val queryId = query.queryId
         if (bot.userId == mBotUid) {
             if (mAntiShockBpf.consume(0) < 0) {
-                Log.e(TAG, "onCallbackQuery: anti-shock filter failed: chatId=$chatId, senderId=$senderId")
+                Log.e(
+                    TAG,
+                    "onCallbackQuery: anti-shock filter failed: ${query.sessionInfo}, senderId=${query.senderUserId}"
+                )
                 return true
             }
             runBlocking {
-                val rttiType = query["@type"].asString
-                if (rttiType == "updateNewCallbackQuery") {
-                    val user = bot.getUser(senderId)
-                    val r = ResImpl.getResourceForUser(user)
-                    mCallbackQueryBpf.consume(senderId).also {
-                        if (it < 0) {
-                            return@runBlocking
-                        } else if (it == 0) {
-                            errorAlert(bot, queryId, r.msg_text_too_many_requests)
+                val senderId = query.senderUserId
+                val user = bot.getUser(senderId)
+                val r = ResImpl.getResourceForUser(user)
+                mCallbackQueryBpf.consume(senderId).also {
+                    if (it < 0) {
+                        return@runBlocking
+                    } else if (it == 0) {
+                        errorAlert(bot, query.queryId, r.msg_text_too_many_requests)
+                        return@runBlocking
+                    }
+                }
+                try {
+                    val bytes = query.payloadData
+                    if (query.sessionInfo.isTrivialPrivateChat) {
+                        // PM
+                        if (bytes.size != 8) {
+                            errorAlert(bot, queryId, "unexpected payload data, expected 8 bytes")
                             return@runBlocking
                         }
-                    }
-                    try {
-                        val payloadData = query["payload"].asJsonObject["data"].asString
-                        val bytes = Base64.decode(payloadData, Base64.NO_WRAP)
-                        if (chatId > 0) {
-                            // PM
-                            if (bytes.size != 8) {
-                                errorAlert(bot, queryId, "unexpected payload data, expected 8 bytes")
+                        val authId = BinaryUtils.readLe32(bytes, 0)
+                        val authInfo = SessionManager.getAuthSession(bot, user.userId)
+                        if (authInfo == null) {
+                            errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
+                            return@runBlocking
+                        }
+                        AuthUserInterface.onBtnClick(bot, user, query.sessionInfo, authInfo, bytes, queryId)
+                    } else {
+                        // group
+                        when (val type = bytes[0].toInt()) {
+                            3 -> {
+                                onAnonymousAdminCallback(bot, user, query.sessionInfo, bytes, queryId)
                                 return@runBlocking
                             }
-                            val authId = BinaryUtils.readLe32(bytes, 0)
-                            val authInfo = SessionManager.getAuthSession(bot, user.userId)
-                            if (authInfo == null) {
-                                errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
+                            else -> {
+                                errorAlert(bot, queryId, "unknown payload type: $type")
                                 return@runBlocking
-                            }
-                            AuthUserInterface.onBtnClick(bot, user, chatId, authInfo, bytes, queryId)
-                        } else {
-                            // group
-                            val type = bytes[0].toInt()
-                            when (type) {
-                                3 -> {
-                                    onAnonymousAdminCallback(bot, user, chatId, bytes, queryId)
-                                    return@runBlocking
-                                }
-                                else -> {
-                                    errorAlert(bot, queryId, "unknown payload type: $type")
-                                    return@runBlocking
-                                }
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "onCallbackQuery, error: ${e.message}", e)
-                        errorAlert(bot, queryId, e.toString())
                     }
-                } else {
-                    Log.e(TAG, "unexpected callback query type: $rttiType")
+                } catch (e: Exception) {
+                    Log.e(TAG, "onCallbackQuery, error: ${e.message}", e)
+                    errorAlert(bot, queryId, e.toString())
                 }
             }
             return true
@@ -443,17 +449,17 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
     }
 
     private suspend fun onAnonymousAdminCallback(
-        bot: Bot, user: User, chatId: Long, bytes: ByteArray, queryId: String
+        bot: Bot, user: User, si: SessionInfo, bytes: ByteArray, queryId: Long
     ) {
         val aaaId = AnonymousAdminVerification.getIdFromMagicBytes(bytes)
         val cmd = AnonymousAdminVerification.getCmdFromMagicBytes(bytes)
-        if (aaaId == 0 || cmd == 0 || chatId > 0) {
+        if (aaaId == 0 || cmd == 0 || !si.isGroupOrChannel) {
             errorAlert(bot, queryId, "query data is invalid")
             return
         }
         val r = ResImpl.getResourceForUser(user)
         // check if the user is an admin
-        val gid = Bot.chatIdToGroupId(chatId)
+        val gid = si.id
         val group = bot.getGroup(gid)
         val isAdmin = group.isMemberAdministrative(bot, user.userId)
         if (!isAdmin) {
@@ -465,7 +471,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
             errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
             return
         }
-        if (chatId != session.chatId) {
+        if (si != session.si) {
             errorAlert(bot, queryId, r.cb_query_auth_session_not_found)
             return
         }
@@ -474,7 +480,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 AdminConfigInterface.onStartConfigCommand(bot, user, group, session.origMsgId)
                 mAnonymousAdminVerifications.remove(aaaId)
                 try {
-                    bot.deleteMessage(chatId, session.tmpMsgId)
+                    bot.deleteMessage(si, session.tmpMsgId)
                 } catch (ignored: RemoteApiException) {
                     // ignore
                 }
@@ -483,7 +489,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 // cancel
                 mAnonymousAdminVerifications.remove(aaaId)
                 try {
-                    bot.deleteMessage(chatId, session.tmpMsgId)
+                    bot.deleteMessage(si, session.tmpMsgId)
                 } catch (ignored: RemoteApiException) {
                     // ignore
                 }
@@ -495,21 +501,21 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         }
     }
 
-    override fun onMemberJoinRequest(bot: Bot, chatId: Long, userId: Long, event: JsonObject): Boolean {
-        Log.d(TAG, "onMemberJoinRequest: chatId: $chatId, userId: $userId")
+    override fun onMemberJoinRequest(bot: Bot, groupId: Long, userId: Long, request: ChatJoinRequest): Boolean {
+        Log.d(TAG, "onMemberJoinRequest: groupId: $groupId, userId: $userId")
         runBlocking {
-            val gid = Bot.chatIdToGroupId(chatId)
-            val group = bot.getGroup(gid)
+            val group = bot.getGroup(groupId)
             val user = bot.getUser(userId)
             val r = ResImpl.getResourceForUser(user)
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
+                val pmsi = SessionInfo.forUser(userId)
                 ChannelLog.onJoinRequest(bot, group, userId)
                 // make TDLib know the PM chat before send msg
                 bot.getChat(userId)
                 val originHintMsgId = bot.sendMessageForText(
-                    userId, r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
+                    pmsi, r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
                 )
-                Log.i(TAG, "send user join request msg to user: $userId, group: $gid")
+                Log.i(TAG, "send user join request msg to user: $userId, group: $groupId")
                 val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
                 val maxWaitTimeSeconds = groupConfig.startAuthTimeoutSeconds
                 if (maxWaitTimeSeconds > 0) {
@@ -519,18 +525,18 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                         val authSession = SessionManager.getAuthSession(bot, userId)
                         if (authSession != null) {
                             if (authSession.currentAuthId == 0 && authSession.authStatus == SessionManager.AuthStatus.REQUESTED) {
-                                Log.i(TAG, "dismiss timeout join request: $userId, group: $gid")
+                                Log.i(TAG, "dismiss timeout join request: $userId, group: $groupId")
                                 ChannelLog.onStartAuthTimeout(bot, group, userId)
                                 // drop the auth session if the user didn't start auth in time
                                 SessionManager.dropAuthSession(bot, userId)
                                 // delete the msg and dismiss the request
                                 try {
-                                    bot.deleteMessage(chatId, originHintMsgId.id)
+                                    bot.deleteMessage(pmsi, originHintMsgId.id)
                                 } catch (e: RemoteApiException) {
                                     Log.w(TAG, "delete request msg: $e")
                                 }
                                 try {
-                                    bot.processChatJoinRequest(chatId, userId, false)
+                                    bot.processChatJoinRequest(groupId, userId, false)
                                 } catch (e: RemoteApiException) {
                                     if (e.message == "HIDE_REQUESTER_MISSING") {
                                         // nothing serious, just ignore it
@@ -547,88 +553,90 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     }
                 }
             } else {
-                Log.i(TAG, "ignore user join request: $userId, group: $gid because disabled")
+                Log.i(TAG, "ignore user join request: $userId, group: $groupId because disabled")
             }
         }
         return true
     }
 
-    override fun onUpdateMessageContent(bot: Bot, chatId: Long, msgId: Long, content: JsonObject): Boolean {
+    override fun onUpdateMessageContent(bot: Bot, si: SessionInfo, msgId: Long, content: JsonObject): Boolean {
         // Log.d(TAG, "onUpdateMessageContent, chatId: $chatId, msgId: $msgId")
         return false
     }
 
-    override fun onMessageEdited(bot: Bot, chatId: Long, msgId: Long, editDate: Int): Boolean {
+    override fun onMessageEdited(bot: Bot, si: SessionInfo, msgId: Long, editDate: Int): Boolean {
         // Log.d(TAG, "onMessageEdited, chatId: $chatId, msgId: $msgId, editDate: $editDate")
         return false
     }
 
-    override fun onChatPermissionsChanged(bot: Bot, chatId: Long, permissions: JsonObject): Boolean {
+    override fun onGroupDefaultPermissionsChanged(bot: Bot, groupId: Long, permissions: ChatPermissions): Boolean {
+        Log.d(TAG, "onGroupDefaultPermissionsChanged, groupId: $groupId")
         return false
     }
 
-    override fun onMemberStatusChanged(bot: Bot, chatId: Long, userId: Long, event: JsonObject): Boolean {
-        Log.d("onMemberStatusChanged", "chatId: $chatId, userId: $userId, event: $event")
+    override fun onMemberStatusChanged(
+        bot: Bot,
+        groupId: Long,
+        userId: Long,
+        event: ChannelMemberStatusEvent
+    ): Boolean {
+        Log.d("onMemberStatusChanged", "groupId: $groupId, userId: $userId, event: $event")
         if (bot != mBot) {
             return false
         }
-        if (Bot.isChannelChatId(chatId)) {
-            val gid = Bot.chatIdToChannelId(chatId)
-            val session = SessionManager.getAuthSession(bot, userId) ?: return false
-            if (session.targetGroupId != gid) {
-                return false
-            }
-            if (session.authStatus in listOf(
-                    SessionManager.AuthStatus.REQUESTED,
-                    SessionManager.AuthStatus.AUTHENTICATING
-                )
-            ) return runBlocking {
-                val user = bot.getUser(userId)
-                val group = bot.getGroup(gid)
-                bot.getChat(userId)
-                val operatorId = event["actor_user_id"].asLong
-                val r = ResImpl.getResourceForUser(user)
-                // notify the user
-                when (val newStatus = event["new_chat_member"].asJsonObject["status"].asJsonObject["@type"].asString) {
-                    "chatMemberStatusMember",
-                    "chatMemberStatusCreator",
-                    "chatMemberStatusRestricted",
-                    "chatMemberStatusAdministrator" -> {
-                        bot.sendMessageForText(userId, r.format(r.msg_text_approved_manually_by_admin_va1, group.name))
-                        val oldMsgId = session.originalMessageId
-                        SessionManager.dropAuthSession(bot, userId)
-                        ChannelLog.onManualApproveJoinRequest(bot, group, userId, operatorId)
-                        if (oldMsgId != 0L) {
-                            bot.deleteMessage(userId, oldMsgId)
-                        }
-                        return@runBlocking true
+        val session = SessionManager.getAuthSession(bot, userId) ?: return false
+        if (session.targetGroupId != groupId) {
+            return false
+        }
+        if (session.authStatus in listOf(
+                SessionManager.AuthStatus.REQUESTED,
+                SessionManager.AuthStatus.AUTHENTICATING
+            )
+        ) return runBlocking {
+            val user = bot.getUser(userId)
+            val group = bot.getGroup(groupId)
+            bot.getChat(userId)
+            val operatorId = event.actorUserId
+            val r = ResImpl.getResourceForUser(user)
+            val pmsi = SessionInfo.forUser(userId)
+            // notify the user
+            when (val newStatus = event.newStatus!!.javaClass) {
+                MemberStatus.Member::class.java,
+                MemberStatus.Creator::class.java,
+                MemberStatus.Restricted::class.java,
+                MemberStatus.Administrator::class.java -> {
+                    bot.sendMessageForText(pmsi, r.format(r.msg_text_approved_manually_by_admin_va1, group.name))
+                    val oldMsgId = session.originalMessageId
+                    SessionManager.dropAuthSession(bot, userId)
+                    ChannelLog.onManualApproveJoinRequest(bot, group, userId, operatorId)
+                    if (oldMsgId != 0L) {
+                        bot.deleteMessage(pmsi, oldMsgId)
                     }
-                    "chatMemberStatusBanned" -> {
-                        bot.sendMessageForText(userId, r.format(r.msg_text_banned_manually_by_admin_va1, group.name))
-                        val oldMsgId = session.originalMessageId
-                        SessionManager.dropAuthSession(bot, userId)
-                        ChannelLog.onManualDenyJoinRequest(bot, group, userId, operatorId)
-                        if (oldMsgId != 0L) {
-                            bot.deleteMessage(userId, oldMsgId)
-                        }
-                        return@runBlocking true
-                    }
-                    else -> {
-                        Log.e(TAG, "unexpected status: $newStatus, group: $gid, user: $userId")
-                        return@runBlocking false
-                    }
+                    return@runBlocking true
                 }
-            } else {
-                return false
+                MemberStatus.Banned::class.java -> {
+                    bot.sendMessageForText(pmsi, r.format(r.msg_text_banned_manually_by_admin_va1, group.name))
+                    val oldMsgId = session.originalMessageId
+                    SessionManager.dropAuthSession(bot, userId)
+                    ChannelLog.onManualDenyJoinRequest(bot, group, userId, operatorId)
+                    if (oldMsgId != 0L) {
+                        bot.deleteMessage(pmsi, oldMsgId)
+                    }
+                    return@runBlocking true
+                }
+                else -> {
+                    Log.e(TAG, "unexpected status: $newStatus, group: $groupId, user: $userId")
+                    return@runBlocking false
+                }
             }
         } else {
             return false
         }
     }
 
-    override fun onDeleteMessages(bot: Bot, chatId: Long, msgIds: List<Long>): Boolean {
+    override fun onDeleteMessages(bot: Bot, si: SessionInfo, msgIds: List<Long>): Boolean {
         val msgToDelete = HashSet<Long>(4)
-        val keys = msgIds.map { chatId.toString() + "_" + it.toString() }
+        val keys = msgIds.map { si.toTDLibChatId().toString() + "_" + it.toString() }
         synchronized(mCascadeDeleteMsgLock) {
             keys.forEach { k ->
                 mCascadeDeleteMsg.remove(k)?.let { id ->
@@ -639,7 +647,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         if (msgToDelete.isNotEmpty()) {
             runBlocking {
                 try {
-                    bot.deleteMessages(chatId, msgToDelete.toList())
+                    bot.deleteMessages(si, msgToDelete.toList())
                 } catch (e: RemoteApiException) {
                     // we don't really care about the error
                     Log.w(TAG, "cascade delete msg, error: ${e.message}")
@@ -649,12 +657,12 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         return true
     }
 
-    fun scheduleCascadeDeleteMessage(chatId: Long, origMsgId: Long, targetMsgId: Long) {
+    fun scheduleCascadeDeleteMessage(si: SessionInfo, origMsgId: Long, targetMsgId: Long) {
         assert(origMsgId != targetMsgId)
-        assert(chatId != 0L)
+        assert(si.id != 0L)
         assert(origMsgId > 0L)
         assert(targetMsgId > 0L)
-        val key = chatId.toString() + "_" + origMsgId
+        val key = si.toTDLibChatId().toString() + "_" + origMsgId
         synchronized(mCascadeDeleteMsgLock) {
             mCascadeDeleteMsg[key] = targetMsgId
         }
@@ -665,7 +673,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
             // we don't need to delete the msg if it's not sent to server yet
             return
         }
-        scheduleCascadeDeleteMessage(chatId, origMsgId, this.id)
+        scheduleCascadeDeleteMessage(sessionInfo, origMsgId, this.id)
     }
 
     internal fun Job.logErrorIfFail() {

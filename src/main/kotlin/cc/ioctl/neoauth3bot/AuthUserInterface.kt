@@ -8,6 +8,7 @@ import cc.ioctl.neoauth3bot.dat.ChemDatabase
 import cc.ioctl.neoauth3bot.res.ResImpl
 import cc.ioctl.neoauth3bot.util.BinaryUtils
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.obj.SessionInfo
 import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.RemoteApiException
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.Message
@@ -69,9 +70,7 @@ object AuthUserInterface {
             rows.add(cols.toTypedArray())
         }
         val texts = arrayOf(
-            r.btn_text_change_quiz,
-            r.btn_text_reset,
-            r.btn_text_submit
+            r.btn_text_change_quiz, r.btn_text_reset, r.btn_text_submit
         )
         ArrayList<ReplyMarkup.InlineKeyboard.Button>().apply {
             for (i in texts.indices) {
@@ -90,17 +89,17 @@ object AuthUserInterface {
         return ReplyMarkup.InlineKeyboard(rows.toTypedArray())
     }
 
-    private suspend fun errorAlert(bot: Bot, queryId: String, msg: String) {
+    private suspend fun errorAlert(bot: Bot, queryId: Long, msg: String) {
         bot.answerCallbackQuery(queryId, msg, true)
     }
 
     suspend fun onBtnClick(
         bot: Bot,
         user: User,
-        chatId: Long,
+        si: SessionInfo,
         auth3Info: SessionManager.UserAuthSession,
         bytes8: ByteArray,
-        queryId: String
+        queryId: Long
     ) {
         var isInvalidateRequired: Boolean = false
         val r = ResImpl.getResourceForUser(user)
@@ -169,7 +168,7 @@ object AuthUserInterface {
                 if (isCorrect) {
                     Log.d(TAG, "user $user got the correct answer")
                     try {
-                        onAuthenticationSuccess(bot, user, chatId, auth3Info)
+                        onAuthenticationSuccess(bot, user, si, auth3Info)
                         bot.answerCallbackQuery(queryId, r.cb_query_auth_pass, false)
                     } catch (e: Exception) {
                         Log.e(TAG, "onAuthenticationSuccess: $e", e)
@@ -195,9 +194,9 @@ object AuthUserInterface {
                 val targetGid = auth3Info.targetGroupId
                 val groupConfig = SessionManager.getGroupConfig(bot, targetGid)
                 val maxDuration = groupConfig?.authProcedureTimeoutSeconds ?: 600
-                bot.getMessage(chatId, auth3Info.originalMessageId, false)
+                bot.getMessage(si, auth3Info.originalMessageId, false)
                 bot.editMessageCaption(
-                    chatId,
+                    si,
                     auth3Info.originalMessageId,
                     LocaleHelper.createFormattedMsgText(auth3Info, user, maxDuration),
                     buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
@@ -214,35 +213,35 @@ object AuthUserInterface {
         }
     }
 
-    suspend fun onStartAuthCommand(bot: Bot, chatId: Long, user: User, msg: Message, isForTest: Boolean) {
+    suspend fun onStartAuthCommand(bot: Bot, si: SessionInfo, user: User, msg: Message, isForTest: Boolean) {
         val senderId = user.userId
         val r = ResImpl.getResourceForUser(user)
         if (!checkAuthRate(senderId)) {
-            bot.sendMessageForText(chatId, r.msg_text_too_many_requests)
+            bot.sendMessageForText(si, r.msg_text_too_many_requests)
             return
         }
         var auth3Info = SessionManager.getAuthSession(bot, senderId)
         val targetGid = auth3Info?.targetGroupId ?: 0L
         if (!isForTest && targetGid == 0L) {
-            bot.sendMessageForText(chatId, r.msg_text_no_auth_required)
+            bot.sendMessageForText(si, r.msg_text_no_auth_required)
             return
         }
         if (auth3Info == null) {
             auth3Info = SessionManager.createAuthSessionForTest(bot, user)
         }
-        startNewAuth(bot, chatId, user, auth3Info, requestMsgId = msg.id, previousMsgId = 0)
+        startNewAuth(bot, si, user, auth3Info, requestMsgId = msg.id, previousMsgId = 0)
     }
 
     suspend fun startNewAuth(
         bot: Bot,
-        chatId: Long,
+        si: SessionInfo,
         user: User,
         auth3Info: SessionManager.UserAuthSession,
         requestMsgId: Long,
         previousMsgId: Long
     ) {
         val r = ResImpl.getResourceForUser(user)
-        val tmpMsgId = bot.sendMessageForText(chatId, r.msg_text_loading, replyMsgId = requestMsgId).id
+        val tmpMsgId = bot.sendMessageForText(si, r.msg_text_loading, replyMsgId = requestMsgId).id
         try {
             val authId = SessionManager.nextAuthSequence()
             val targetGid = auth3Info.targetGroupId
@@ -305,7 +304,7 @@ object AuthUserInterface {
             )
             val markup = buildMatrixButtonMarkup(user, auth3Info.currentAuthId, auth3Info)
             val ret = bot.sendMessageForPhoto(
-                chatId,
+                si,
                 tmpFile,
                 LocaleHelper.createFormattedMsgText(auth3Info, user, maxDuration),
                 markup,
@@ -321,9 +320,9 @@ object AuthUserInterface {
         } catch (e: Exception) {
             val msg = "create auth3 error: " + (e.message ?: e.toString())
             Log.e(TAG, msg, e)
-            bot.sendMessageForText(chatId, msg)
+            bot.sendMessageForText(si, msg)
         }
-        bot.deleteMessage(chatId, tmpMsgId)
+        bot.deleteMessage(si, tmpMsgId)
     }
 
     private fun initMoleculeConfig(molecule: Molecule): MoleculeRender.MoleculeRenderConfig {
@@ -335,27 +334,23 @@ object AuthUserInterface {
     }
 
     private suspend fun onAuthenticationSuccess(
-        bot: Bot,
-        user: User,
-        chatId: Long,
-        auth3Info: SessionManager.UserAuthSession
+        bot: Bot, user: User, si: SessionInfo, auth3Info: SessionManager.UserAuthSession
     ) {
         val r = ResImpl.getResourceForUser(user)
         val targetGroupId = auth3Info.targetGroupId
         val now = System.currentTimeMillis()
         val cost = ((now - auth3Info.authStartTime) / 1000).toInt()
-        bot.sendMessageForText(chatId, String.format(Locale.ROOT, r.msg_text_auth_pass_va1, cost))
-        bot.deleteMessage(chatId, auth3Info.originalMessageId)
+        bot.sendMessageForText(si, String.format(Locale.ROOT, r.msg_text_auth_pass_va1, cost))
+        bot.deleteMessage(si, auth3Info.originalMessageId)
         var isApprovalFailure = false
         if (targetGroupId != 0L) {
             // approve user to join group
-            val targetChatId = Bot.groupIdToChatId(targetGroupId)
             // resolve chat and user to make TDLib happy
-            bot.getChat(targetChatId)
+            bot.getGroup(targetGroupId)
             bot.getUser(auth3Info.userId)
             try {
-                bot.processChatJoinRequest(targetChatId, auth3Info.userId, true)
-                Log.d(TAG, "approved user ${auth3Info.userId} into group ${targetGroupId}")
+                bot.processChatJoinRequest(targetGroupId, auth3Info.userId, true)
+                Log.d(TAG, "approved user ${auth3Info.userId} into group $targetGroupId")
             } catch (e: RemoteApiException) {
                 if (e.message?.contains("USER_ALREADY_PARTICIPANT") == true) {
                     // ignore
@@ -373,10 +368,10 @@ object AuthUserInterface {
             SessionManager.dropAuthSession(bot, auth3Info.userId)
             auth3Info.originalMessageId = 0L
             if (targetGroupId != 0L) {
-                bot.sendMessageForText(chatId, r.msg_text_approve_success)
+                bot.sendMessageForText(si, r.msg_text_approve_success)
             }
         } else {
-            bot.sendMessageForText(chatId, r.msg_text_error_denied_by_other_admin)
+            bot.sendMessageForText(si, r.msg_text_error_denied_by_other_admin)
         }
     }
 

@@ -2,6 +2,7 @@ package cc.ioctl.neoauth3bot
 
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.Group
+import cc.ioctl.telebot.tdlib.obj.SessionInfo
 import cc.ioctl.telebot.tdlib.obj.User
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.FormattedTextBuilder
 import cc.ioctl.telebot.tdlib.tlrpc.api.msg.Message
@@ -75,15 +76,13 @@ object AdminConfigInterface {
     )
 
     suspend fun onStartConfigCommand(bot: Bot, user: User, group: Group, origMsgId: Long) {
-        val chatId = Bot.groupIdToChatId(group.groupId)
+        val si = SessionInfo.forGroup(group.groupId)
         val botUserName = bot.username
-        if (botUserName.isNullOrEmpty()) {
-            throw IllegalStateException("bot user name is null")
-        }
+        check(botUserName?.isNotEmpty() == true) { "bot username is empty" }
         // check whether the user is admin
         val isAdmin = group.isMemberAdministrative(bot, user.userId)
         if (!isAdmin) {
-            bot.sendMessageForText(chatId, "你不是群管理员, 不能使用本命令", replyMsgId = origMsgId)
+            bot.sendMessageForText(si, "你不是群管理员, 不能使用本命令", replyMsgId = origMsgId)
             return
         } else {
             val key = UUID.randomUUID().toString()
@@ -100,14 +99,14 @@ object AdminConfigInterface {
                     )
                 )
             )
-            val tmpMsgId = bot.sendMessageForText(chatId, msgText, replyMarkup = replyMarkup, replyMsgId = origMsgId)
+            val tmpMsgId = bot.sendMessageForText(si, msgText, replyMarkup = replyMarkup, replyMsgId = origMsgId)
             // schedule delete the message after 30 seconds
             bot.server.executor.execute {
                 try {
                     runBlocking {
                         withContext(Dispatchers.IO) {
                             delay(30_000)
-                            bot.deleteMessage(chatId, tmpMsgId.id)
+                            bot.deleteMessage(si, tmpMsgId.id)
                         }
                     }
                 } catch (e: Exception) {
@@ -117,23 +116,23 @@ object AdminConfigInterface {
         }
     }
 
-    suspend fun onStartConfigInterface(bot: Bot, chatId: Long, user: User, message: Message, sid: String) {
+    suspend fun onStartConfigInterface(bot: Bot, si: SessionInfo, user: User, message: Message, sid: String) {
         val botUserName = bot.username
         if (botUserName.isNullOrEmpty()) {
-            throw IllegalStateException("bot user name is null")
+            error("bot user name is null")
         }
         val startUrlPrefix = "https://t.me/${botUserName}?start="
         val adminSession = mAdminSessionMap[sid]
         if (adminSession == null) {
-            bot.sendMessageForText(chatId, "链接已过期。", replyMsgId = message.id)
+            bot.sendMessageForText(si, "链接已过期。", replyMsgId = message.id)
             return
         }
         if (user.userId != adminSession.adminId) {
-            bot.sendMessageForText(chatId, "你不是生成链接的管理员。", replyMsgId = message.id)
+            bot.sendMessageForText(si, "你不是生成链接的管理员。", replyMsgId = message.id)
             return
         }
-        if (chatId != user.userId) {
-            bot.sendMessageForText(chatId, "请使用私聊会话进行配置。", replyMsgId = message.id)
+        if (!si.isTrivialPrivateChat) {
+            bot.sendMessageForText(si, "请使用私聊会话进行配置。", replyMsgId = message.id)
             return
         }
         val groupId = adminSession.groupId
@@ -153,7 +152,7 @@ object AdminConfigInterface {
         }
         msgBody + "[" + msgBody.TextUrl("刷新", startUrlPrefix + "admincfg_${sid}") + "] "
         msgBody + "[" + msgBody.TextUrl("结束当前配置", startUrlPrefix + "admincfgend_${sid}") + "]"
-        bot.sendMessageForText(chatId, msgBody.build(), replyMsgId = message.id)
+        bot.sendMessageForText(si, msgBody.build(), replyMsgId = message.id)
     }
 
     private fun <T> getConfigValue(cfg: SessionManager.GroupAuthConfig, property: ConfigPropertyMetadata<T>): T {
@@ -214,23 +213,28 @@ object AdminConfigInterface {
         return false
     }
 
-    suspend fun onStartEditValueInterface(bot: Bot, chatId: Long, user: User, message: Message, sid: String, idx: Int) {
+    suspend fun onStartEditValueInterface(
+        bot: Bot,
+        si: SessionInfo,
+        user: User,
+        message: Message,
+        sid: String,
+        idx: Int
+    ) {
         val botUserName = bot.username
-        if (botUserName.isNullOrEmpty()) {
-            throw IllegalStateException("bot user name is null")
-        }
+        check(!botUserName.isNullOrEmpty()) { "bot user name is null" }
         val startUrlPrefix = "https://t.me/${botUserName}?start="
         val adminSession = mAdminSessionMap[sid]
         if (adminSession == null) {
-            bot.sendMessageForText(chatId, "链接已过期。", replyMsgId = message.id)
+            bot.sendMessageForText(si, "链接已过期。", replyMsgId = message.id)
             return
         }
         if (user.userId != adminSession.adminId) {
-            bot.sendMessageForText(chatId, "你不是生成链接的管理员。", replyMsgId = message.id)
+            bot.sendMessageForText(si, "你不是生成链接的管理员。", replyMsgId = message.id)
             return
         }
-        if (chatId != user.userId) {
-            bot.sendMessageForText(chatId, "请使用私聊会话进行配置。", replyMsgId = message.id)
+        if (!si.isTrivialPrivateChat) {
+            bot.sendMessageForText(si, "请使用私聊会话进行配置。", replyMsgId = message.id)
             return
         }
         val groupId = adminSession.groupId
@@ -243,14 +247,12 @@ object AdminConfigInterface {
             this + prop.description + "\n\n"
             this + "请输入(发送)新的值  [" + TextUrl("取消", startUrlPrefix + "admincfgcancel_${sid}") + "]"
         }
-        bot.doOnNextMessage(chatId) { senderId, msg ->
-            if (senderId != user.userId) {
-                throw IllegalStateException("senderId != user.userId")
-            }
+        bot.doOnNextMessage(si) { senderId, msg ->
+            check(senderId == user.userId) { "senderId != user.userId" }
             return@doOnNextMessage runBlocking {
                 val msgText = msg.content.get("text")?.asJsonObject?.get("text")?.asString
                 if (msgText == null) {
-                    bot.sendMessageForText(chatId, "无效输入，取消修改。", replyMsgId = msg.id)
+                    bot.sendMessageForText(si, "无效输入，取消修改。", replyMsgId = msg.id)
                     return@runBlocking true
                 }
                 if (msgText.startsWith("/")) {
@@ -259,22 +261,22 @@ object AdminConfigInterface {
                 }
                 val value: Any? = parseStringInput(msgText, prop)
                 if (value == null) {
-                    bot.sendMessageForText(chatId, "数据格式不正确，取消修改。", replyMsgId = msg.id)
+                    bot.sendMessageForText(si, "数据格式不正确，取消修改。", replyMsgId = msg.id)
                     return@runBlocking true
                 }
                 if (checkUpdateConfigValue(groupConfig, prop as ConfigPropertyMetadata<Any>, value)) {
                     SessionManager.saveGroupConfig(bot, groupId, groupConfig)
                     bot.sendMessageForText(
-                        chatId,
+                        si,
                         "已将 " + prop.name + " 设置为 " + value.toString(),
                         replyMsgId = msg.id
                     )
                 } else {
-                    bot.sendMessageForText(chatId, "值不在范围内，取消修改。", replyMsgId = msg.id)
+                    bot.sendMessageForText(si, "值不在范围内，取消修改。", replyMsgId = msg.id)
                 }
                 return@runBlocking true
             }
         }
-        bot.sendMessageForText(chatId, msgBody.build(), replyMsgId = message.id)
+        bot.sendMessageForText(si, msgBody.build(), replyMsgId = message.id)
     }
 }

@@ -3,6 +3,7 @@ package cc.ioctl.neoauth3bot
 import cc.ioctl.neoauth3bot.svc.FilterService
 import cc.ioctl.neoauth3bot.svc.SysVmService
 import cc.ioctl.telebot.tdlib.obj.Bot
+import cc.ioctl.telebot.tdlib.obj.SessionInfo
 
 object HypervisorCommandHandler {
 
@@ -10,13 +11,13 @@ object HypervisorCommandHandler {
 
     interface HvCmdCallback {
         suspend fun onSupervisorCommand(
-            bot: Bot, chatId: Long, senderId: Long, serviceCmd: String, args: Array<String>
+            bot: Bot, si: SessionInfo, senderId: Long, serviceCmd: String, args: Array<String>
         ): String?
     }
 
     suspend fun onSupervisorCommand(
         bot: Bot,
-        chatId: Long,
+        si: SessionInfo,
         senderId: Long,
         serviceName: String,
         serviceCmd: String,
@@ -29,12 +30,12 @@ object HypervisorCommandHandler {
             else -> null
         }
         if (service != null) {
-            val ret = service.onSupervisorCommand(bot, chatId, senderId, serviceCmd, args)
+            val ret = service.onSupervisorCommand(bot, si, senderId, serviceCmd, args)
             if (!ret.isNullOrEmpty()) {
-                bot.sendMessageForText(chatId, ret, replyMsgId = origMsgId)
+                bot.sendMessageForText(si, ret, replyMsgId = origMsgId)
             }
         } else {
-            bot.sendMessageForText(chatId, "Unknown service: '$serviceName'", replyMsgId = origMsgId)
+            bot.sendMessageForText(si, "Unknown service: '$serviceName'", replyMsgId = origMsgId)
         }
     }
 
