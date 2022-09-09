@@ -1,5 +1,6 @@
 package cc.ioctl.neoauth3bot
 
+import cc.ioctl.neoauth3bot.dat.AnointedManager
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
 import cc.ioctl.neoauth3bot.res.ResImpl
 import cc.ioctl.neoauth3bot.svc.FilterService
@@ -498,7 +499,6 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
     }
 
     override fun onMemberJoinRequest(bot: Bot, groupId: Long, userId: Long, request: ChatJoinRequest): Boolean {
-        Log.d(TAG, "onMemberJoinRequest: groupId: $groupId, userId: $userId")
         runBlocking {
             val group = bot.getGroup(groupId)
             val user = bot.getUser(userId)
@@ -508,6 +508,17 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 ChannelLog.onJoinRequest(bot, group, userId)
                 // make TDLib know the PM chat before send msg
                 bot.getChat(userId)
+                if (AnointedManager.getAnointedStatus(groupId, userId) == 1) {
+                    // pre-approved
+                    Log.i(TAG, "onMemberJoinRequest: pre-approved: groupId: $groupId, userId: $userId")
+                    bot.processChatJoinRequest(groupId, userId, true)
+                    SessionManager.dropAuthSession(bot, user.userId)
+                    ChannelLog.onAutomaticApprove(bot, group, userId)
+                    // done
+                    return@runBlocking
+                } else {
+                    Log.d(TAG, "onMemberJoinRequest: groupId: $groupId, userId: $userId, not pre-approved")
+                }
                 val originHintMsgId = bot.sendMessageForText(
                     pmsi, r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
                 )

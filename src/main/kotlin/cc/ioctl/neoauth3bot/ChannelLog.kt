@@ -187,6 +187,19 @@ object ChannelLog {
         }
     }
 
+    suspend fun onAutomaticApprove(bot: Bot, group: Group, userId: Long) {
+        getLogChannelForGroup(bot, group)?.let {
+            postLogToChannelAsync(
+                bot,
+                it,
+                "AUTOMATIC_APPROVE",
+                group,
+                0,
+                userId
+            )
+        }
+    }
+
     suspend fun onManualApproveJoinRequest(bot: Bot, group: Group, userId: Long, adminId: Long) {
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
