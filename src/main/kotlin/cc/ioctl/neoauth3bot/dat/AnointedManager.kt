@@ -10,16 +10,15 @@ object AnointedManager {
 
     @JvmStatic
     private fun swap64(v: Long): Long {
-        val b0 = (v and 0xff).toByte()
-        val b1 = (v shr 8 and 0xff).toByte()
-        val b2 = (v shr 16 and 0xff).toByte()
-        val b3 = (v shr 24 and 0xff).toByte()
-        val b4 = (v shr 32 and 0xff).toByte()
-        val b5 = (v shr 40 and 0xff).toByte()
-        val b6 = (v shr 48 and 0xff).toByte()
-        val b7 = (v shr 56 and 0xff).toByte()
-        return (b0.toLong() shl 56) or (b1.toLong() shl 48) or (b2.toLong() shl 40) or (b3.toLong() shl 32) or
-                (b4.toLong() shl 24) or (b5.toLong() shl 16) or (b6.toLong() shl 8) or b7.toLong()
+        val b0 = (v and 0xff).toInt()
+        val b1 = ((v shr 8) and 0xff).toInt()
+        val b2 = ((v shr 16) and 0xff).toInt()
+        val b3 = ((v shr 24) and 0xff).toInt()
+        val b4 = ((v shr 32) and 0xff).toInt()
+        val b5 = ((v shr 40) and 0xff).toInt()
+        val b6 = ((v shr 48) and 0xff).toInt()
+        val b7 = ((v shr 56) and 0xff).toInt()
+        return (b0.toLong() shl 56) or (b1.toLong() shl 48) or (b2.toLong() shl 40) or (b3.toLong() shl 32) or (b4.toLong() shl 24) or (b5.toLong() shl 16) or (b6.toLong() shl 8) or b7.toLong()
     }
 
     fun getAnointedStatus(gid: Long, uid: Long): Int {
