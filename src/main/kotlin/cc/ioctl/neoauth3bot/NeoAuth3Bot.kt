@@ -141,14 +141,10 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         LocaleHelper.discussionGroupLink = cfg.getString("discussion_group_link", null)
         mHypervisorIds.clear()
         cfg.getList<Long>("hypervisor_ids").forEach { id ->
-            if (!SessionInfo.isTrivialUserSender(id) && !SessionInfo.isAnonymousSender(id)) {
-                Log.e(TAG, "Invalid hypervisor user id: $id")
-            } else {
-                if (SessionInfo.isAnonymousSender(id)) {
-                    Log.w(TAG, "Using anonymous hypervisor id($id) is discouraged")
-                }
-                mHypervisorIds.add(id)
+            if (id < 0) {
+                Log.w(TAG, "Using anonymous hypervisor id($id) is discouraged")
             }
+            mHypervisorIds.add(id)
         }
         if (sdfPath == null || indexPath == null || candidatePath == null || botUid == 0L) {
             askUserToUpdateConfigFile()
