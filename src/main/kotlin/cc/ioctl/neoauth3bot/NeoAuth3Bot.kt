@@ -612,7 +612,10 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 MemberStatus.Creator::class.java,
                 MemberStatus.Restricted::class.java,
                 MemberStatus.Administrator::class.java -> {
-                    bot.sendMessageForText(pmsi, r.format(r.msg_text_approved_manually_by_admin_va1, group.name))
+                    if (operatorId != bot.userId) {
+                        // if user get approved by an admin, notify the user
+                        bot.sendMessageForText(pmsi, r.format(r.msg_text_approved_manually_by_admin_va1, group.name))
+                    }
                     val oldMsgId = session.originalMessageId
                     SessionManager.dropAuthSession(bot, userId)
                     ChannelLog.onManualApproveJoinRequest(bot, group, userId, operatorId)
