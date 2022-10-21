@@ -1,5 +1,6 @@
 package cc.ioctl.neoauth3bot
 
+import cc.ioctl.neoauth3bot.svc.LogDatabaseService
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.Channel
 import cc.ioctl.telebot.tdlib.obj.Group
@@ -16,9 +17,9 @@ import kotlinx.coroutines.yield
 import java.text.SimpleDateFormat
 import java.util.*
 
-object ChannelLog {
+object EventLogs {
 
-    private const val TAG = "ChannelLog"
+    private const val TAG = "EventLogs"
 
     private var mErrorLogChannel: Channel? = null
     private var mDefaultLogChannelId: Long = 0
@@ -136,92 +137,127 @@ object ChannelLog {
     }
 
     suspend fun onJoinRequest(bot: Bot, group: Group, userId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "JOIN_REQUEST",
+                group = group.groupId,
+                subject = userId,
+                actor = userId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "JOIN_REQUEST",
-                group,
-                0,
-                userId
+                bot, it, "JOIN_REQUEST", group, 0, userId
             )
         }
     }
 
     suspend fun onStartAuthTimeout(bot: Bot, group: Group, userId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "AUTH_TIMEOUT_START",
+                group = group.groupId,
+                subject = userId,
+                actor = userId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "AUTH_TIMEOUT_START",
-                group,
-                0,
-                userId
+                bot, it, "AUTH_TIMEOUT_START", group, 0, userId
             )
         }
     }
 
     suspend fun onHideRequesterMissing(bot: Bot, group: Group, userId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "HIDE_REQUESTER_MISSING",
+                group = group.groupId,
+                subject = userId,
+                actor = userId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "HIDE_REQUESTER_MISSING",
-                group,
-                0,
-                userId
+                bot, it, "HIDE_REQUESTER_MISSING", group, 0, userId
             )
         }
     }
 
     suspend fun onAuthPassed(bot: Bot, group: Group, userId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "AUTH_PASSED",
+                group = group.groupId,
+                subject = userId,
+                actor = userId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "AUTH_PASSED",
-                group,
-                0,
-                userId
+                bot, it, "AUTH_PASSED", group, 0, userId
             )
         }
     }
 
     suspend fun onAutomaticApprove(bot: Bot, group: Group, userId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "AUTOMATIC_APPROVE",
+                group = group.groupId,
+                subject = userId,
+                actor = bot.userId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "AUTOMATIC_APPROVE",
-                group,
-                0,
-                userId
+                bot, it, "AUTOMATIC_APPROVE", group, 0, userId
             )
         }
     }
 
     suspend fun onManualApproveJoinRequest(bot: Bot, group: Group, userId: Long, adminId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "APPROVE",
+                group = group.groupId,
+                subject = userId,
+                actor = adminId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "APPROVE",
-                group,
-                adminId,
-                userId
+                bot, it, "APPROVE", group, adminId, userId
             )
         }
     }
 
     suspend fun onManualDenyJoinRequest(bot: Bot, group: Group, userId: Long, adminId: Long) {
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "DISMISS",
+                group = group.groupId,
+                subject = userId,
+                actor = adminId,
+                time = System.currentTimeMillis() / 1000L,
+                extra = null
+            )
+        )
         getLogChannelForGroup(bot, group)?.let {
             postLogToChannelAsync(
-                bot,
-                it,
-                "DISMISS",
-                group,
-                adminId,
-                userId
+                bot, it, "DISMISS", group, adminId, userId
             )
         }
     }
@@ -244,6 +280,16 @@ object ChannelLog {
     fun onError(tag: String, bot: Bot, errMsg: String) {
         val time = System.currentTimeMillis()
         val timeString = mTimeFormat.format(time)
+        LogDatabaseService.addLog(
+            bot, LogDatabaseService.LogEntry(
+                event = "ERROR",
+                group = 0,
+                subject = bot.userId,
+                actor = bot.userId,
+                time = time / 1000L,
+                extra = "$tag $errMsg"
+            )
+        )
         bot.server.executor.execute {
             runBlocking {
                 try {

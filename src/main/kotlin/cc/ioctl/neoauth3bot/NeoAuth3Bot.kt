@@ -162,7 +162,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         Log.i(TAG, "bot: $bot")
         mBotUsername = bot.username
         check(mBotUsername?.isNotEmpty() == true) { "bot $bot has no username" }
-        runBlocking { ChannelLog.setDefaultLogChannelId(bot, mDefaultLogChannelId) }
+        runBlocking { EventLogs.setDefaultLogChannelId(bot, mDefaultLogChannelId) }
         bot.registerOnReceiveMessageListener(this)
         bot.registerCallbackQueryListener(this)
         bot.registerGroupMemberJoinRequestListenerV1(this)
@@ -505,7 +505,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
             val r = ResImpl.getResourceForUser(user)
             if (SessionManager.handleUserJoinRequest(bot, user, group)) {
                 val pmsi = SessionInfo.forUser(userId)
-                ChannelLog.onJoinRequest(bot, group, userId)
+                EventLogs.onJoinRequest(bot, group, userId)
                 // make TDLib know the PM chat before send msg
                 bot.getChat(userId)
                 if (AnointedManager.getAnointedStatus(groupId, userId) == 1) {
@@ -513,7 +513,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     Log.i(TAG, "onMemberJoinRequest: pre-approved: groupId: $groupId, userId: $userId")
                     bot.processChatJoinRequest(groupId, userId, true)
                     SessionManager.dropAuthSession(bot, user.userId)
-                    ChannelLog.onAutomaticApprove(bot, group, userId)
+                    EventLogs.onAutomaticApprove(bot, group, userId)
                     // done
                     return@runBlocking
                 } else {
@@ -533,7 +533,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                         if (authSession != null) {
                             if (authSession.currentAuthId == 0 && authSession.authStatus == SessionManager.AuthStatus.REQUESTED) {
                                 Log.i(TAG, "dismiss timeout join request: $userId, group: $groupId")
-                                ChannelLog.onStartAuthTimeout(bot, group, userId)
+                                EventLogs.onStartAuthTimeout(bot, group, userId)
                                 // drop the auth session if the user didn't start auth in time
                                 SessionManager.dropAuthSession(bot, userId)
                                 // delete the msg and dismiss the request
@@ -618,7 +618,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     }
                     val oldMsgId = session.originalMessageId
                     SessionManager.dropAuthSession(bot, userId)
-                    ChannelLog.onManualApproveJoinRequest(bot, group, userId, operatorId)
+                    EventLogs.onManualApproveJoinRequest(bot, group, userId, operatorId)
                     if (oldMsgId != 0L) {
                         bot.deleteMessage(pmsi, oldMsgId)
                     }
@@ -628,7 +628,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                     bot.sendMessageForText(pmsi, r.format(r.msg_text_banned_manually_by_admin_va1, group.name))
                     val oldMsgId = session.originalMessageId
                     SessionManager.dropAuthSession(bot, userId)
-                    ChannelLog.onManualDenyJoinRequest(bot, group, userId, operatorId)
+                    EventLogs.onManualDenyJoinRequest(bot, group, userId, operatorId)
                     if (oldMsgId != 0L) {
                         bot.deleteMessage(pmsi, oldMsgId)
                     }

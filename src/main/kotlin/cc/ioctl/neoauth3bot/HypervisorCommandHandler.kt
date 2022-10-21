@@ -1,6 +1,7 @@
 package cc.ioctl.neoauth3bot
 
 import cc.ioctl.neoauth3bot.svc.FilterService
+import cc.ioctl.neoauth3bot.svc.LogDatabaseService
 import cc.ioctl.neoauth3bot.svc.SysVmService
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.SessionInfo
@@ -27,6 +28,7 @@ object HypervisorCommandHandler {
         val service: HvCmdCallback? = when (serviceName) {
             "pf" -> FilterService
             "sys" -> SysVmService
+            "db" -> LogDatabaseService
             else -> null
         }
         if (service != null) {

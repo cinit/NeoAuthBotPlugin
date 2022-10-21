@@ -172,7 +172,7 @@ object AuthUserInterface {
                         bot.answerCallbackQuery(queryId, r.cb_query_auth_pass, false)
                     } catch (e: Exception) {
                         Log.e(TAG, "onAuthenticationSuccess: $e", e)
-                        ChannelLog.onError(TAG, bot, e)
+                        EventLogs.onError(TAG, bot, e)
                         bot.answerCallbackQuery(queryId, e.toString(), true)
                     }
                     return
@@ -356,13 +356,13 @@ object AuthUserInterface {
                     // ignore
                 } else if (e.message?.contains("HIDE_REQUESTER_MISSING") == true) {
                     isApprovalFailure = true
-                    ChannelLog.onHideRequesterMissing(bot, bot.getGroup(targetGroupId), user.userId)
+                    EventLogs.onHideRequesterMissing(bot, bot.getGroup(targetGroupId), user.userId)
                 } else {
                     // rethrow
                     throw e
                 }
             }
-            ChannelLog.onAuthPassed(bot, bot.getGroup(targetGroupId), user.userId)
+            EventLogs.onAuthPassed(bot, bot.getGroup(targetGroupId), user.userId)
         }
         if (!isApprovalFailure) {
             SessionManager.dropAuthSession(bot, auth3Info.userId)
