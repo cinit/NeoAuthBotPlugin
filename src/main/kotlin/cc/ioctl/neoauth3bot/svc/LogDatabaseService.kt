@@ -115,7 +115,7 @@ object LogDatabaseService : HypervisorCommandHandler.HvCmdCallback {
                             || it.startsWith("delete ") -> {
                         TYPE_UPDATE
                     }
-                    it.matches(Regex("[( ]*select .*")) -> {
+                    it.matches(Regex("[( ]*select .*")) || it.startsWith("show ") -> {
                         TYPE_QUERY
                     }
                     else -> {
@@ -126,30 +126,32 @@ object LogDatabaseService : HypervisorCommandHandler.HvCmdCallback {
             if (type == TYPE_QUERY) {
                 synchronized(conn) {
                     val startTime = System.nanoTime()
+                    var i = 0
                     conn.createStatement().use { stmt ->
-                        val rs = stmt.executeQuery(sql)
-                        val md = rs.metaData
-                        val colCount = md.columnCount
-                        var i = 0
-                        while (rs.next() && i < maxAllowedLines) {
-                            if (i < maxShowLines) {
-                                for (j in 1..colCount) {
-                                    sb.append(rs.getString(j))
-                                    sb.append(",")
+                        stmt.executeQuery(sql).use { rs ->
+                            val md = rs.metaData
+                            val colCount = md.columnCount
+                            while (rs.next() && i < maxAllowedLines) {
+                                if (i < maxShowLines) {
+                                    for (j in 1..colCount) {
+                                        sb.append(rs.getString(j))
+                                        sb.append(",")
+                                    }
                                 }
+                                sb.append('\n')
+                                i++
                             }
-                            i++
-                        }
-                        sb.append('\n')
-                        if (i >= maxAllowedLines) {
-                            sb.append("... more")
-                        } else if (i > maxShowLines) {
-                            sb.append("... ").append(i).append(" rows in all.")
-                        } else {
-                            sb.append(i).append(" row(s).")
                         }
                     }
                     val execTime = System.nanoTime() - startTime
+                    sb.append('\n')
+                    if (i >= maxAllowedLines) {
+                        sb.append("... more")
+                    } else if (i > maxShowLines) {
+                        sb.append("... ").append(i).append(" rows in all.")
+                    } else {
+                        sb.append(i).append(" row(s).")
+                    }
                     sb.append('\n')
                     sb.append("Exec time: %.3f ms".format(execTime / 1000000.0))
                 }
@@ -181,7 +183,7 @@ object LogDatabaseService : HypervisorCommandHandler.HvCmdCallback {
 
     @Throws(IllegalArgumentException::class)
     private fun checkSingleSqlStatement(statement: String) {
-        val sql = statement.trim().lowercase()
+        val sql = statement.trim().trimEnd(';').lowercase()
         if (sql.contains(";")) {
             throw IllegalArgumentException("only single sql statement is allowed")
         }
