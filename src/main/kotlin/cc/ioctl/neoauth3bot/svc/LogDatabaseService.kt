@@ -137,8 +137,8 @@ object LogDatabaseService : HypervisorCommandHandler.HvCmdCallback {
                                         sb.append(rs.getString(j))
                                         sb.append(",")
                                     }
+                                    sb.append('\n')
                                 }
-                                sb.append('\n')
                                 i++
                             }
                         }
