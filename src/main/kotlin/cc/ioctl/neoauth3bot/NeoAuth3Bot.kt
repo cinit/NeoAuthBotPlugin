@@ -9,6 +9,7 @@ import cc.ioctl.neoauth3bot.util.BinaryUtils
 import cc.ioctl.telebot.EventHandler
 import cc.ioctl.telebot.plugin.PluginBase
 import cc.ioctl.telebot.startup.BotStartupMain
+import cc.ioctl.telebot.tdlib.RobotServer
 import cc.ioctl.telebot.tdlib.obj.Bot
 import cc.ioctl.telebot.tdlib.obj.SessionInfo
 import cc.ioctl.telebot.tdlib.obj.User
@@ -173,6 +174,7 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
 //        }.toString(), bot, server.defaultTimeout).let {
 //            Log.d(TAG, "ret: $it")
 //        }
+        server.exceptionHandler = mExceptionHandler
     }
 
     private fun askUserToUpdateConfigFile() {
@@ -684,6 +686,41 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
             return
         }
         scheduleCascadeDeleteMessage(sessionInfo, origMsgId, this.id)
+    }
+
+    private val mAutoReportFilter = TokenBucket<Int>(3, 300)
+
+    private val mExceptionHandler: RobotServer.ExceptionHandler = object : RobotServer.ExceptionHandler {
+        override fun onException(e: Throwable, t: Thread) {
+            Log.e(TAG, "uncaught exception in thread: ${t.name}", e)
+            val sb = StringBuilder().apply {
+                append("uncaught exception in thread: ").append(t.name).append("\n")
+                append(e.stackTraceToString())
+            }
+            val msg = sb.toString()
+            val adminUid = mHypervisorIds.firstOrNull { it > 0 }
+            if (adminUid != null) {
+                if (mAutoReportFilter.tryConsume(1)) {
+                    runBlocking {
+                        try {
+                            // make TDLib know the user
+                            mBot.getUser(adminUid)
+                            mBot.getChat(adminUid)
+                            mBot.sendMessageForText(
+                                SessionInfo.forUser(adminUid),
+                                msg
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "failed to send exception report to admin", e)
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "auto report is throttled")
+                }
+            } else {
+                Log.w(TAG, "no admin user")
+            }
+        }
     }
 
     internal fun Job.logErrorIfFail() {
