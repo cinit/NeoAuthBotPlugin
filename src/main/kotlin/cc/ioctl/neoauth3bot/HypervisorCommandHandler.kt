@@ -1,5 +1,6 @@
 package cc.ioctl.neoauth3bot
 
+import cc.ioctl.misc.InlineBotMsgCleaner
 import cc.ioctl.neoauth3bot.svc.FilterService
 import cc.ioctl.neoauth3bot.svc.LogDatabaseService
 import cc.ioctl.neoauth3bot.svc.SysVmService
@@ -29,6 +30,7 @@ object HypervisorCommandHandler {
             "pf" -> FilterService
             "sys" -> SysVmService
             "db" -> LogDatabaseService
+            "ic" -> InlineBotMsgCleaner
             else -> null
         }
         if (service != null) {

@@ -1,5 +1,6 @@
 package cc.ioctl.neoauth3bot
 
+import cc.ioctl.misc.InlineBotMsgCleaner
 import cc.ioctl.neoauth3bot.dat.AnointedManager
 import cc.ioctl.neoauth3bot.dat.ChemDatabase
 import cc.ioctl.neoauth3bot.res.ResImpl
@@ -198,6 +199,9 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
         val msgId = message.id
         if (message.date < SYNC_START_TIME / 1000L) {
             Log.d(TAG, "message $si senderId $senderId msgId $msgId is too old, ignore")
+            return true
+        }
+        if (InlineBotMsgCleaner.onReceiveMessage(bot, si, senderId, message)) {
             return true
         }
         if ((si.isTrivialPrivateChat && senderId > 0) || message.content.toString().contains("@" + mBotUsername!!)) {
