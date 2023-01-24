@@ -324,6 +324,22 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                         bot.sendMessageForText(si, e.message ?: e.toString(), replyMsgId = msgId)
                             .scheduledCascadeDelete(msgId)
                     }
+                } else if (message.content.toString().contains("\"/via_id")) {
+                    try {
+                        val originMsgId = message.replyToMessageId
+                        if (originMsgId == 0L) {
+                            bot.sendMessageForText(si, "Please reply to a message.", replyMsgId = msgId)
+                                .scheduledCascadeDelete(msgId)
+                        } else {
+                            val origMsg = bot.getMessage(si, originMsgId, true)
+                            bot.sendMessageForText(
+                                si, origMsg.viaBotUserId.toString(), replyMsgId = msgId
+                            ).scheduledCascadeDelete(msgId)
+                        }
+                    } catch (e: Exception) {
+                        bot.sendMessageForText(si, e.message ?: e.toString(), replyMsgId = msgId)
+                            .scheduledCascadeDelete(msgId)
+                    }
                 } else if (message.content.toString()
                         .contains("\"/cc1") || (si.isTrivialPrivateChat && message.content.toString()
                         .contains("\"/ccg"))
