@@ -636,7 +636,18 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 MemberStatus.Administrator::class.java -> {
                     if (operatorId != bot.userId) {
                         // if user get approved by an admin, notify the user
-                        bot.sendMessageForText(pmsi, r.format(r.msg_text_approved_manually_by_admin_va1, group.name))
+                        try {
+                            bot.sendMessageForText(
+                                pmsi,
+                                r.format(r.msg_text_approved_manually_by_admin_va1, group.name)
+                            )
+                        } catch (e: RemoteApiException) {
+                            if (e.code == 403) {
+                                // ignore: Bot was blocked by the user
+                            } else {
+                                throw e
+                            }
+                        }
                     }
                     val oldMsgId = session.originalMessageId
                     SessionManager.dropAuthSession(bot, userId)
