@@ -541,9 +541,25 @@ class NeoAuth3Bot : PluginBase(), EventHandler.MessageListenerV1, EventHandler.C
                 } else {
                     Log.d(TAG, "onMemberJoinRequest: groupId: $groupId, userId: $userId, not pre-approved")
                 }
-                val originHintMsgId = bot.sendMessageForText(
-                    pmsi, r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
-                )
+                val originHintMsgId: Message
+                try {
+                    originHintMsgId = bot.sendMessageForText(
+                        pmsi, r.format(r.msg_text_join_auth_required_notice_va2, user.name, group.name)
+                    )
+                } catch (e: RemoteApiException) {
+                    if (e.code == 403) {
+                        // RemoteApiException: 403: Bot can't initiate conversation with a user
+                        // This will happen if a group has more than one bot attempting to send a message to the user
+                        // Since there is other bot sending message to the user, we can just ignore this error
+                        Log.w(TAG, "onMemberJoinRequest: race condition, drop auth, " +
+                                "groupId: $groupId, userId: $userId, msg: ${e.message}")
+                        // Drop the auth session
+                        SessionManager.dropAuthSession(bot, user.userId)
+                        return@runBlocking
+                    } else {
+                        throw e
+                    }
+                }
                 Log.i(TAG, "send user join request msg to user: $userId, group: $groupId")
                 val groupConfig = SessionManager.getOrCreateGroupConfig(bot, group)
                 val maxWaitTimeSeconds = groupConfig.startAuthTimeoutSeconds
